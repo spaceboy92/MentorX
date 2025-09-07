@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MentorX - AI Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script type="importmap">
+{
+  "imports": {
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.8.2",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.16.0",
+    "react-syntax-highlighter/": "https://aistudiocdn.com/react-syntax-highlighter@^15.6.6/",
+    "react-syntax-highlighter": "https://aistudiocdn.com/react-syntax-highlighter@^15.6.6",
+    "remark-gfm": "https://aistudiocdn.com/remark-gfm@^4.0.1",
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
+    "regenerator-runtime/": "https://aistudiocdn.com/regenerator-runtime@^0.14.1/",
+    "re-resizable": "https://aistudiocdn.com/re-resizable@^6.11.2",
+    "react-speech-recognition": "https://aistudiocdn.com/react-speech-recognition@^4.0.1",
+    "jszip": "https://aistudiocdn.com/jszip@^3.10.1"
+  }
+}
+</script>
+<style>
+  :root {
+    --bg-primary: #0d1127;
+    --bg-secondary: #1a203c;
+    --accent-primary: #818cf8;
+    --accent-secondary: #f472b6;
+    --text-primary: #e0e7ff;
+    --text-secondary: #a5b4fc;
+    --font-family: 'Lexend', sans-serif;
+    --panel-opacity: 1;
+  }
+  body {
+    font-family: var(--font-family);
+  }
+  .bg-panel {
+    background-color: hsla(
+      from var(--bg-secondary) h s l / var(--panel-opacity)
+    );
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  .blinking-cursor {
+    animation: blink 1s step-end infinite;
+  }
+</style>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
