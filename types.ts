@@ -99,7 +99,7 @@ export interface ClipEffect {
 }
 
 export interface ClipTransition {
-  type: 'crossfade';
+  type: 'fade-in';
   duration: number; // in seconds
 }
 
@@ -116,13 +116,21 @@ export interface TimelineClip {
   // Calculated properties
   duration: number;
   effects: ClipEffect[];
-  transition?: ClipTransition; // Transition leading out of this clip
+  transition?: ClipTransition; // Transition leading INTO this clip
+
+  // For text clips
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number; // in vw units for responsiveness
+  color?: string;
+  backgroundColor?: string;
+  position?: { x: number; y: number }; // 0-100 for percentage
 }
 
 
 export interface TimelineTrack {
   id: string;
-  type: 'video' | 'audio';
+  type: 'video' | 'audio' | 'text';
   clips: TimelineClip[];
 }
 

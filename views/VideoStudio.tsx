@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import type { MediaAsset, TimelineClip, TimelineTrack, ClipEffect } from '../types';
-import { UploadIcon, FilmIcon, MusicIcon, ImageIcon, PlayIcon, PauseIcon, ScissorsIcon, BrushIcon } from '../components/icons/Icons';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import type { MediaAsset, TimelineClip, TimelineTrack, ClipEffect, ClipTransition } from '../types';
+import { UploadIcon, FilmIcon, MusicIcon, ImageIcon, PlayIcon, PauseIcon, ScissorsIcon, BrushIcon, TypeIcon, MoveIcon, TextIcon, DownloadIcon } from '../components/icons/Icons';
 
 // Helper to get media duration
 const getMediaDuration = (element: HTMLMediaElement): Promise<number> => {
@@ -85,9 +85,12 @@ const PreviewPlayer: React.FC<{
 
     const videoTrack = tracks.find(t => t.type === 'video');
     const audioTrack = tracks.find(t => t.type === 'audio');
+    const textTrack = tracks.find(t => t.type === 'text');
     
     const currentVideoClip = videoTrack?.clips.find(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration);
     const videoAsset = assets.find(a => a.id === currentVideoClip?.assetId);
+    
+    const activeTextClips = textTrack?.clips.filter(c => currentTime >= c.timelineStart && currentTime < c.timelineStart + c.duration) || [];
 
     // This effect syncs the preview elements with the timeline state
     useEffect(() => {
@@ -155,10 +158,44 @@ const PreviewPlayer: React.FC<{
             default: return '';
         }
     }).join(' ');
+    
+    let opacity = 1;
+    if (currentVideoClip?.transition?.type === 'fade-in') {
+        const progress = (currentTime - currentVideoClip.timelineStart) / currentVideoClip.transition.duration;
+        if (progress < 1) {
+            opacity = progress;
+        }
+    }
 
     return (
-        <div className="bg-black rounded-lg w-full h-full flex items-center justify-center relative group">
-            <video ref={videoRef} className="max-w-full max-h-full" style={{ filter: filterStyle }} />
+        <div className="bg-black rounded-lg w-full h-full flex items-center justify-center relative group overflow-hidden">
+            <video ref={videoRef} className="max-w-full max-h-full" style={{ filter: filterStyle, opacity }} />
+
+            {/* Text Overlays */}
+            <div className="absolute inset-0 pointer-events-none w-full h-full">
+                {activeTextClips.map(clip => (
+                    <div 
+                        key={clip.instanceId}
+                        className="p-2 rounded"
+                        style={{
+                            position: 'absolute',
+                            left: `${clip.position?.x ?? 50}%`,
+                            top: `${clip.position?.y ?? 50}%`,
+                            transform: 'translate(-50%, -50%)',
+                            fontSize: `${clip.fontSize ?? 4}vw`,
+                            color: clip.color ?? '#FFFFFF',
+                            backgroundColor: clip.backgroundColor ?? 'transparent',
+                            fontFamily: clip.fontFamily ?? 'sans-serif',
+                            whiteSpace: 'pre-wrap',
+                            textAlign: 'center',
+                            textShadow: '2px 2px 4px rgba(0,0,0,0.7)',
+                        }}
+                    >
+                        {clip.text}
+                    </div>
+                ))}
+            </div>
+
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
                  <button onClick={onTogglePlay} className="p-3 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 hover:bg-[var(--accent-primary)] transition-all">
                     {isPlaying ? <PauseIcon className="w-6 h-6"/> : <PlayIcon className="w-6 h-6" />}
@@ -175,16 +212,74 @@ const Timeline: React.FC<{
     currentTime: number;
     totalDuration: number;
     selectedClipId: string | null;
+    activeTool: 'select' | 'split';
     onScrub: (time: number) => void;
     onDrop: (assetId: string, trackId: string, timelineStart: number) => void;
     onSelectClip: (clipInstanceId: string | null) => void;
-}> = ({ assets, tracks, currentTime, totalDuration, selectedClipId, onScrub, onDrop, onSelectClip }) => {
+    onUpdateClip: (updatedClip: TimelineClip) => void;
+    onSplitClip: (clipInstanceId: string, time: number) => void;
+}> = ({ assets, tracks, currentTime, totalDuration, selectedClipId, activeTool, onScrub, onDrop, onSelectClip, onUpdateClip, onSplitClip }) => {
     const timelineContainerRef = useRef<HTMLDivElement>(null);
+    const draggingInfo = useRef<{ type: 'move' | 'trim-start' | 'trim-end', clipId: string, startX: number, originalClip: TimelineClip } | null>(null);
+
     const PIXELS_PER_SECOND = 50;
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!draggingInfo.current) return;
+
+        const timeDelta = (e.clientX - draggingInfo.current.startX) / PIXELS_PER_SECOND;
+        const { type, clipId, originalClip } = draggingInfo.current;
+        const asset = assets.find(a => a.id === originalClip.assetId);
+        if (!asset && originalClip.assetId !== 'text') return;
+        
+        let updatedClip = { ...originalClip };
+
+        if (type === 'move') {
+            updatedClip.timelineStart = Math.max(0, originalClip.timelineStart + timeDelta);
+        } else if (type === 'trim-start') {
+            const trimChange = timeDelta;
+            const newTrimStart = Math.max(0, originalClip.trimStart + trimChange);
+            const durationChange = originalClip.trimStart - newTrimStart;
+            if (originalClip.duration + durationChange > 1) { // Min clip duration
+                updatedClip.trimStart = newTrimStart;
+                updatedClip.timelineStart = originalClip.timelineStart + trimChange;
+                updatedClip.duration = originalClip.duration + durationChange;
+            }
+        } else if (type === 'trim-end') {
+            const durationChange = timeDelta;
+            if (originalClip.duration + durationChange > 1) {
+                updatedClip.duration = originalClip.duration + durationChange;
+                updatedClip.trimEnd = originalClip.trimStart + updatedClip.duration;
+            }
+        }
+        
+        // Clamp trim points to asset duration
+        if (asset) {
+            updatedClip.trimStart = Math.max(0, updatedClip.trimStart);
+            updatedClip.trimEnd = Math.min(asset.duration, updatedClip.trimEnd);
+        }
+
+        onUpdateClip(updatedClip);
+
+    }, [assets, onUpdateClip]);
+
+    const handleMouseUp = useCallback(() => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+        draggingInfo.current = null;
+    }, [handleMouseMove]);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent, type: 'move' | 'trim-start' | 'trim-end', clip: TimelineClip) => {
+        e.stopPropagation();
+        onSelectClip(clip.instanceId);
+        if (activeTool !== 'select') return;
+
+        draggingInfo.current = { type, clipId: clip.instanceId, startX: e.clientX, originalClip: clip };
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }, [activeTool, handleMouseMove, handleMouseUp, onSelectClip]);
     
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-    };
+    const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
     const handleDrop = (e: React.DragEvent, trackId: string) => {
         e.preventDefault();
@@ -197,7 +292,7 @@ const Timeline: React.FC<{
     };
 
     const handleScrub = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (e.buttons !== 1) return; // Only scrub when mouse is down
+        if (e.buttons !== 1) return;
         if (!e.currentTarget) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -206,10 +301,25 @@ const Timeline: React.FC<{
     };
     
     const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) {
-        onSelectClip(null);
-      }
+      if (e.target === e.currentTarget) onSelectClip(null);
     }
+    
+    const getClipBackgroundColor = (trackType: TimelineTrack['type']) => {
+        switch(trackType) {
+            case 'video': return 'bg-indigo-500/50';
+            case 'audio': return 'bg-emerald-500/50';
+            case 'text': return 'bg-rose-500/50';
+            default: return 'bg-gray-500/50';
+        }
+    };
+     const getClipBorderColor = (trackType: TimelineTrack['type']) => {
+        switch(trackType) {
+            case 'video': return 'border-indigo-400';
+            case 'audio': return 'border-emerald-400';
+            case 'text': return 'border-rose-400';
+            default: return 'border-gray-400';
+        }
+    };
 
     return (
         <div className="bg-[var(--bg-secondary)]/50 rounded-lg border border-white/10 flex flex-col h-full overflow-hidden" onClick={handleTimelineClick}>
@@ -246,14 +356,30 @@ const Timeline: React.FC<{
                                 return (
                                 <div
                                     key={clip.instanceId}
-                                    onClick={(e) => { e.stopPropagation(); onSelectClip(clip.instanceId); }}
-                                    className={`absolute top-1/2 -translate-y-1/2 h-16 bg-indigo-500/50 rounded-md overflow-hidden cursor-pointer transition-all ${isSelected ? 'border-4 border-cyan-400 shadow-lg' : 'border-2 border-indigo-400'}`}
+                                    onClick={(e) => { 
+                                        e.stopPropagation(); 
+                                        if (activeTool === 'split') {
+                                            onSplitClip(clip.instanceId, currentTime);
+                                        } else {
+                                            onSelectClip(clip.instanceId);
+                                        }
+                                    }}
+                                    onMouseDown={(e) => handleMouseDown(e, 'move', clip)}
+                                    className={`absolute top-1/2 -translate-y-1/2 h-16 ${getClipBackgroundColor(track.type)} rounded-md overflow-hidden transition-all flex items-center ${isSelected ? 'border-4 border-cyan-400 shadow-lg' : `border-2 ${getClipBorderColor(track.type)}`} ${activeTool === 'select' ? 'cursor-move' : 'cursor-pointer'}`}
                                     style={{
                                         left: `${clip.timelineStart * PIXELS_PER_SECOND}px`,
                                         width: `${clip.duration * PIXELS_PER_SECOND}px`,
                                     }}
                                 >
-                                    <span className="p-2 text-xs text-white truncate pointer-events-none absolute inset-0 bg-black/20 flex items-center">{asset?.name}</span>
+                                    <div 
+                                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize bg-cyan-400/50 z-10"
+                                        onMouseDown={e => handleMouseDown(e, 'trim-start', clip)}
+                                    />
+                                    <span className="p-2 text-xs text-white truncate pointer-events-none w-full text-center">{clip.text || asset?.name}</span>
+                                    <div 
+                                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-cyan-400/50 z-10"
+                                        onMouseDown={e => handleMouseDown(e, 'trim-end', clip)}
+                                    />
                                 </div>
                             )})}
                         </div>
@@ -267,10 +393,14 @@ const Timeline: React.FC<{
 const InspectorPanel: React.FC<{
     selectedClip: TimelineClip | null;
     onUpdateClip: (updatedClip: TimelineClip) => void;
-}> = ({ selectedClip, onUpdateClip }) => {
+    assets: MediaAsset[];
+}> = ({ selectedClip, onUpdateClip, assets }) => {
     if (!selectedClip) {
         return <div className="bg-[var(--bg-secondary)]/50 rounded-lg border border-white/10 flex flex-col h-full items-center justify-center text-gray-500 p-4"><p className="text-center">Select a clip on the timeline to edit its properties.</p></div>;
     }
+
+    const asset = assets.find(a => a.id === selectedClip.assetId);
+    const isTextClip = !asset; // Text clips don't have a media asset
 
     const handleEffectChange = (type: ClipEffect['type'], value: number) => {
         const existingEffect = selectedClip.effects.find(e => e.type === type);
@@ -282,6 +412,15 @@ const InspectorPanel: React.FC<{
         }
         onUpdateClip({ ...selectedClip, effects: newEffects });
     };
+    
+    const handleTransitionChange = (type: ClipTransition['type'], duration: number) => {
+        if (duration <= 0) {
+            onUpdateClip({ ...selectedClip, transition: undefined });
+        } else {
+            const newTransition: ClipTransition = { type, duration };
+            onUpdateClip({ ...selectedClip, transition: newTransition });
+        }
+    };
 
     const getEffectValue = (type: ClipEffect['type'], defaultValue: number) => {
         return selectedClip.effects.find(e => e.type === type)?.value ?? defaultValue;
@@ -291,31 +430,69 @@ const InspectorPanel: React.FC<{
         <div className="bg-[var(--bg-secondary)]/50 rounded-lg border border-white/10 flex flex-col h-full">
             <h3 className="text-lg font-semibold text-white p-4 border-b border-white/10">Inspector</h3>
             <div className="flex-1 p-4 overflow-y-auto space-y-6">
-                <div>
-                    <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-2"><ScissorsIcon className="w-4 h-4"/>Properties</h4>
-                    {/* Trim controls can be added here */}
-                </div>
-                 <div>
-                    <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-3"><BrushIcon className="w-4 h-4"/>Effects</h4>
-                    <div className="space-y-4 text-xs">
-                        <label className="block space-y-1">
-                            <span>Brightness ({getEffectValue('brightness', 100)}%)</span>
-                            <input type="range" min="0" max="200" value={getEffectValue('brightness', 100)} onChange={e => handleEffectChange('brightness', +e.target.value)} className="w-full" />
-                        </label>
-                         <label className="block space-y-1">
-                            <span>Contrast ({getEffectValue('contrast', 100)}%)</span>
-                            <input type="range" min="0" max="200" value={getEffectValue('contrast', 100)} onChange={e => handleEffectChange('contrast', +e.target.value)} className="w-full" />
-                        </label>
-                         <label className="block space-y-1">
-                            <span>Grayscale ({getEffectValue('grayscale', 0)}%)</span>
-                            <input type="range" min="0" max="100" value={getEffectValue('grayscale', 0)} onChange={e => handleEffectChange('grayscale', +e.target.value)} className="w-full" />
-                        </label>
+                {isTextClip ? (
+                    <div>
+                        <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-3"><TextIcon className="w-4 h-4"/>Text Content</h4>
+                        <div className="space-y-4 text-xs">
+                             <textarea value={selectedClip.text || ''} onChange={e => onUpdateClip({...selectedClip, text: e.target.value })} rows={3} className="w-full bg-black/20 border border-white/10 rounded-md p-2 text-sm text-[var(--text-secondary)] resize-y focus:outline-none focus:border-[var(--accent-primary)] transition-colors"/>
+                            <label className="block space-y-1"><span>Font Size (vw)</span><input type="number" value={selectedClip.fontSize || 4} onChange={e => onUpdateClip({...selectedClip, fontSize: +e.target.value })} className="w-full bg-black/20 border border-white/10 rounded p-1"/> </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="block space-y-1"><span>Text Color</span><input type="color" value={selectedClip.color || '#ffffff'} onChange={e => onUpdateClip({...selectedClip, color: e.target.value })} className="w-full bg-black/20 border border-white/10 rounded p-1 h-8"/> </label>
+                                <label className="block space-y-1"><span>Background</span><input type="color" value={selectedClip.backgroundColor || '#000000'} onChange={e => onUpdateClip({...selectedClip, backgroundColor: e.target.value })} className="w-full bg-black/20 border border-white/10 rounded p-1 h-8"/> </label>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <>
+                        <div>
+                            <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-3"><BrushIcon className="w-4 h-4"/>Effects</h4>
+                            <div className="space-y-4 text-xs">
+                                <label className="block space-y-1">
+                                    <span>Brightness ({getEffectValue('brightness', 100)}%)</span>
+                                    <input type="range" min="0" max="200" value={getEffectValue('brightness', 100)} onChange={e => handleEffectChange('brightness', +e.target.value)} className="w-full" />
+                                </label>
+                                 <label className="block space-y-1">
+                                    <span>Contrast ({getEffectValue('contrast', 100)}%)</span>
+                                    <input type="range" min="0" max="200" value={getEffectValue('contrast', 100)} onChange={e => handleEffectChange('contrast', +e.target.value)} className="w-full" />
+                                </label>
+                                 <label className="block space-y-1">
+                                    <span>Grayscale ({getEffectValue('grayscale', 0)}%)</span>
+                                    <input type="range" min="0" max="100" value={getEffectValue('grayscale', 0)} onChange={e => handleEffectChange('grayscale', +e.target.value)} className="w-full" />
+                                </label>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-300 mb-3"><FilmIcon className="w-4 h-4"/>Transitions</h4>
+                             <div className="space-y-2 text-xs">
+                                 <label className="block space-y-1"><span>Fade In Duration (s)</span>
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        step="0.1"
+                                        value={selectedClip.transition?.type === 'fade-in' ? selectedClip.transition.duration : 0} 
+                                        onChange={e => handleTransitionChange('fade-in', +e.target.value )} 
+                                        className="w-full bg-black/20 border border-white/10 rounded p-1"/>
+                                 </label>
+                             </div>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );
 };
+
+
+const ToolButton: React.FC<{label: string, Icon: React.ComponentType<{className?: string}>, isActive: boolean, onClick: () => void}> = ({ label, Icon, isActive, onClick }) => (
+    <button 
+        onClick={onClick} 
+        title={label}
+        className={`p-2 rounded-md ${isActive ? 'bg-[var(--accent-primary)] text-white' : 'text-gray-400 hover:bg-white/10 hover:text-white'} transition-colors`}
+    >
+        <Icon className="w-5 h-5"/>
+    </button>
+);
+
 
 // --- Main Component ---
 
@@ -323,12 +500,13 @@ const VideoStudio: React.FC = () => {
     const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
     const [tracks, setTracks] =useState<TimelineTrack[]>([
         { id: 'track-video-1', type: 'video', clips: [] },
+        { id: 'track-text-1', type: 'text', clips: [] },
         { id: 'track-audio-1', type: 'audio', clips: [] },
     ]);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-    // FIX: Correctly initialize useRef for animation frame ID to allow null values.
+    const [activeTool, setActiveTool] = useState<'select' | 'split'>('select');
     const animationFrameRef = useRef<number | null>(null);
     
     const totalDuration = Math.max(20, ...tracks.flatMap(t => t.clips).map(c => c.timelineStart + c.duration));
@@ -383,6 +561,73 @@ const VideoStudio: React.FC = () => {
             track.id === trackId ? { ...track, clips: [...track.clips, newClip] } : track
         ));
     };
+    
+    const handleAddText = () => {
+        const textTrack = tracks.find(t => t.type === 'text');
+        if (!textTrack) return;
+
+        const newClip: TimelineClip = {
+            id: `text-${Date.now()}`,
+            instanceId: `instance-text-${Date.now()}`,
+            assetId: 'text', // Special ID for text clips
+            trackId: textTrack.id,
+            timelineStart: currentTime,
+            duration: 5,
+            trimStart: 0,
+            trimEnd: 5,
+            effects: [],
+            text: 'New Text',
+            fontSize: 5,
+            color: '#FFFFFF',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            position: { x: 50, y: 50 },
+        };
+        
+        setTracks(prev => prev.map(track => track.id === textTrack.id ? {...track, clips: [...track.clips, newClip]} : track));
+        setSelectedClipId(newClip.instanceId);
+    };
+    
+    const handleSplitClip = (clipInstanceId: string, time: number) => {
+        setTracks(prevTracks => {
+            const originalTrack = prevTracks.find(t => t.clips.some(c => c.instanceId === clipInstanceId));
+            const originalClip = originalTrack?.clips.find(c => c.instanceId === clipInstanceId);
+
+            if (!originalTrack || !originalClip) return prevTracks;
+
+            // Ensure playhead is actually within the clip's bounds
+            if (time <= originalClip.timelineStart || time >= originalClip.timelineStart + originalClip.duration) {
+                return prevTracks;
+            }
+
+            // Create a mutable copy to work with
+            const newTracks = JSON.parse(JSON.stringify(prevTracks));
+            const trackToModify = newTracks.find((t: TimelineTrack) => t.id === originalTrack.id)!;
+            const clipIndex = trackToModify.clips.findIndex((c: TimelineClip) => c.instanceId === clipInstanceId);
+            const clipToSplit = trackToModify.clips[clipIndex];
+
+            const splitPointInClipTime = time - originalClip.timelineStart;
+
+            // Part 1 (modifies the clip in the copied state)
+            const firstPartDuration = splitPointInClipTime;
+            clipToSplit.duration = firstPartDuration;
+            clipToSplit.trimEnd = originalClip.trimStart + firstPartDuration;
+            
+            // Part 2 (new clip)
+            const secondPartDuration = originalClip.duration - firstPartDuration;
+            const secondPart: TimelineClip = {
+                ...originalClip, // Use original clip as base to preserve properties like effects
+                id: `clip-${Date.now()}`,
+                instanceId: `instance-${Date.now()}`,
+                timelineStart: time,
+                duration: secondPartDuration,
+                trimStart: clipToSplit.trimEnd, // Start where the first part ended in the source asset
+                trimEnd: originalClip.trimEnd, // End where the original clip ended
+            };
+
+            trackToModify.clips.splice(clipIndex + 1, 0, secondPart);
+            return newTracks;
+        });
+    };
 
     const handleUpdateClip = (updatedClip: TimelineClip) => {
         setTracks(prevTracks => prevTracks.map(track => ({
@@ -390,27 +635,22 @@ const VideoStudio: React.FC = () => {
             clips: track.clips.map(clip => clip.instanceId === updatedClip.instanceId ? updatedClip : clip)
         })));
     };
-
-    // FIX: Improved togglePlay logic to handle resetting playback from the end of the timeline.
+    
     const togglePlay = () => {
-        // If at the end of the timeline, reset to the beginning before playing
-        if (!isPlaying && currentTime >= totalDuration) {
+        if (!isPlaying && currentTime >= totalDuration - 0.01) {
             setCurrentTime(0);
         }
         setIsPlaying(prev => !prev);
     };
 
-    // FIX: Replaced flawed animation logic with a robust implementation.
-    // This new useEffect hook correctly uses the high-resolution timestamp from `requestAnimationFrame`
-    // and removes `currentTime` from its dependency array to prevent an infinite re-render loop,
-    // which was the likely cause of the original error.
     useEffect(() => {
         if (!isPlaying) {
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
             return;
         }
-
         let animationStartTime: number | null = null;
-        // Capture the timeline position when playback starts
         const startPlaybackTime = currentTime;
 
         const animate = (timestamp: number) => {
@@ -428,51 +668,67 @@ const VideoStudio: React.FC = () => {
                 animationFrameRef.current = requestAnimationFrame(animate);
             }
         };
-        
-        // Start the animation loop
         animationFrameRef.current = requestAnimationFrame(animate);
 
-        // Cleanup function to stop the animation frame when the component unmounts or dependencies change
         return () => {
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-        // This effect should only re-run when the playing state or total duration changes.
-        // currentTime is updated inside the effect, so it's not a dependency.
-        // Scrubbing (handled below) pauses playback, allowing this effect to pick up the new currentTime when play is resumed.
-    }, [isPlaying, totalDuration]);
+    }, [isPlaying, totalDuration, currentTime]);
 
     const selectedClip = tracks.flatMap(t => t.clips).find(c => c.instanceId === selectedClipId) || null;
 
     return (
-        <div className="flex flex-col lg:flex-row h-full bg-[var(--bg-primary)] p-4 gap-4">
-            <div className="w-full h-1/3 lg:h-full lg:w-1/4 lg:min-w-[250px]">
-                {selectedClip ? (
-                    <InspectorPanel selectedClip={selectedClip} onUpdateClip={handleUpdateClip} />
-                ) : (
-                    <MediaBin assets={mediaAssets} onUpload={handleFileUpload} />
-                )}
-            </div>
-            <div className="w-full h-2/3 lg:h-full lg:w-3/4 flex flex-col gap-4 min-w-0">
-                <div className="h-3/5 min-h-[200px]">
-                     <PreviewPlayer assets={mediaAssets} tracks={tracks} currentTime={currentTime} isPlaying={isPlaying} onTogglePlay={togglePlay}/>
+        <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+            <header className="flex items-center justify-between p-3 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-3">
+                    <FilmIcon className="w-8 h-8 text-[var(--accent-primary)]" />
+                    <div>
+                        <h1 className="text-lg font-semibold text-white">Video Studio</h1>
+                        <p className="text-xs text-[var(--text-secondary)]">Create and edit videos on the timeline.</p>
+                    </div>
                 </div>
-                <div className="h-2/5 min-h-[200px]">
-                    <Timeline 
-                        assets={mediaAssets} 
-                        tracks={tracks} 
-                        currentTime={currentTime} 
-                        totalDuration={totalDuration} 
-                        selectedClipId={selectedClipId}
-                        // FIX: Added logic to pause playback on scrub to prevent animation conflicts.
-                        onScrub={(time) => {
-                            if (isPlaying) setIsPlaying(false); // Pause on scrub
-                            setCurrentTime(time);
-                        }} 
-                        onDrop={handleDropOnTimeline}
-                        onSelectClip={setSelectedClipId}
-                    />
+                 <button onClick={() => alert('Video rendering is coming soon!')} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--accent-primary)] text-white hover:opacity-90 transition-opacity">
+                    <DownloadIcon className="w-5 h-5" />
+                    Export Video
+                </button>
+            </header>
+            <div className="flex flex-col lg:flex-row flex-1 p-4 gap-4 min-h-0">
+                <div className="w-full lg:w-1/4 lg:min-w-[250px] flex-shrink-0 h-full">
+                    {selectedClip ? (
+                        <InspectorPanel selectedClip={selectedClip} onUpdateClip={handleUpdateClip} assets={mediaAssets} />
+                    ) : (
+                        <MediaBin assets={mediaAssets} onUpload={handleFileUpload} />
+                    )}
+                </div>
+                <div className="flex-1 flex flex-col gap-4 min-w-0">
+                    <div className="flex-[3] min-h-0">
+                         <PreviewPlayer assets={mediaAssets} tracks={tracks} currentTime={currentTime} isPlaying={isPlaying} onTogglePlay={togglePlay}/>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 bg-black/20 rounded-md">
+                        <ToolButton label="Select/Move Tool" Icon={MoveIcon} isActive={activeTool === 'select'} onClick={() => setActiveTool('select')} />
+                        <ToolButton label="Split Tool" Icon={ScissorsIcon} isActive={activeTool === 'split'} onClick={() => setActiveTool('split')} />
+                        <ToolButton label="Add Text" Icon={TypeIcon} isActive={false} onClick={handleAddText} />
+                    </div>
+                    <div className="flex-[2] min-h-[200px]">
+                        <Timeline 
+                            assets={mediaAssets} 
+                            tracks={tracks} 
+                            currentTime={currentTime} 
+                            totalDuration={totalDuration} 
+                            selectedClipId={selectedClipId}
+                            activeTool={activeTool}
+                            onScrub={(time) => {
+                                if (isPlaying) setIsPlaying(false);
+                                setCurrentTime(time);
+                            }} 
+                            onDrop={handleDropOnTimeline}
+                            onSelectClip={setSelectedClipId}
+                            onUpdateClip={handleUpdateClip}
+                            onSplitClip={handleSplitClip}
+                        />
+                    </div>
                 </div>
             </div>
         </div>
