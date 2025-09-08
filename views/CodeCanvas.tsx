@@ -2,14 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Resizable } from 're-resizable';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { CpuIcon, FilePlusIcon, Trash2Icon, FolderIcon, FolderOpenIcon, FileIcon, PlayIcon, DownloadIcon, WrenchIcon, LightbulbIcon, ZapIcon, InfoIcon, AlertTriangleIcon, XCircleIcon } from '../components/icons/Icons';
+import { CpuIcon, FilePlusIcon, Trash2Icon, FolderIcon, FolderOpenIcon, FileIcon, PlayIcon, DownloadIcon, WrenchIcon, LightbulbIcon, ZapIcon, InfoIcon, AlertTriangleIcon, XCircleIcon, TelescopeIcon, CodeIcon } from '../components/icons/Icons';
 import ChatMessage from '../components/ChatMessage';
 import PromptInput from '../components/PromptInput';
 import type { FileSystemItem, VirtualFile, VirtualFolder, Message } from '../types';
 import { GoogleGenAI, Type } from "@google/genai";
-// FIX: Changed import from PERSONAS to DEFAULT_PERSONAS as PERSONAS is not an exported member.
 import { DEFAULT_PERSONAS } from '../constants';
 import JSZip from 'jszip';
+import { useWindowSize } from '../hooks/useWindowSize';
+
 
 const initialFiles: FileSystemItem[] = [
   { type: 'file', name: 'index.html', path: 'index.html', content: '<h1>Hello, MentorX!</h1>\n<p>Ask the AI to change my style!</p>\n<link rel="stylesheet" href="style.css">\n<script src="script.js"></script>' },
@@ -37,7 +38,7 @@ const CodeEditor: React.FC<{
     }, []);
 
     return (
-        <div className="relative flex-1 bg-[#1e293b]">
+        <div className="relative flex-1 bg-[#1e293b] h-full">
             <textarea
                 ref={textareaRef}
                 value={value}
@@ -74,6 +75,18 @@ const findItemByPath = (items: FileSystemItem[], path: string): FileSystemItem |
   return undefined;
 };
 
+interface AiOperation {
+    action: "CREATE_FILE" | "UPDATE_FILE" | "DELETE_FILE" | "CREATE_FOLDER" | "ADD_PACKAGE";
+    path: string;
+    content?: string;
+    package?: string;
+}
+interface AiResponse {
+    thought: string;
+    operations: AiOperation[];
+}
+
+
 const CodeCanvas: React.FC = () => {
   const [files, setFiles] = useState<FileSystemItem[]>(initialFiles);
   const [activeFile, setActiveFile] = useState<string>('index.html');
@@ -84,8 +97,11 @@ const CodeCanvas: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'preview' | 'console'>('preview');
   const [consoleMessages, setConsoleMessages] = useState<any[]>([]);
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  // FIX: Added state to control the prompt input value, which is a required prop for PromptInput.
   const [prompt, setPrompt] = useState('');
+
+  const [mobileView, setMobileView] = useState<'editor' | 'files' | 'chat'>('editor');
+  const { width } = useWindowSize();
+  const isMobile = width < 768;
 
   const currentFile = findItemByPath(files, activeFile);
 
@@ -223,6 +239,34 @@ Your task is to **${action}** this code.
     }
   };
 
+  const handleSuggestImprovements = async () => {
+    if (currentFile?.type !== 'file' || isLoading) return;
+
+    setIsLoading(true);
+    const suggestionPrompt = `As an expert software engineer, review the following code from the file "${activeFile}" and provide suggestions for improvement. Focus on best practices, performance, and readability. Respond in Markdown format.\n\n**Code:**\n\`\`\`${currentFile.name.split('.').pop()}\n${currentFile.content}\n\`\`\``;
+    
+    const userMessage: Message = { id: `user-suggest-${Date.now()}`, role: 'user', text: `Can you suggest improvements for ${activeFile}?` };
+    setMessages(prev => [...prev, userMessage]);
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: suggestionPrompt,
+            config: { systemInstruction: "You are an expert code reviewer. Provide constructive feedback and code examples where necessary." }
+        });
+        const modelMessage: Message = { id: `model-suggest-${Date.now()}`, role: 'model', text: response.text };
+        setMessages(prev => [...prev, modelMessage]);
+    } catch (e) {
+        console.error(e);
+        const errorMsg = { id: `error-${Date.now()}`, role: 'model' as const, text: `Sorry, I couldn't generate suggestions for that file.` };
+        setMessages(prev => [...prev, errorMsg]);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+
   const getFileTreeString = (items: FileSystemItem[], indent = ''): string => {
       return items.map(item => {
           if (item.type === 'folder') {
@@ -232,7 +276,7 @@ Your task is to **${action}** this code.
       }).join('\n');
   };
 
-  const processAiCommands = (response: any) => {
+  const processAiCommands = (response: AiResponse) => {
     if (response.thought) {
         setMessages(prev => [...prev, { id: `model-thought-${Date.now()}`, role: 'model', text: response.thought }]);
     }
@@ -243,12 +287,12 @@ Your task is to **${action}** this code.
         for (const op of response.operations) {
             if (op.action === 'CREATE_FILE' || op.action === 'CREATE_FOLDER') {
                 const newItem: FileSystemItem = op.action === 'CREATE_FILE'
-                    ? { type: 'file', name: op.path.split('/').pop(), path: op.path, content: op.content || '' }
-                    : { type: 'folder', name: op.path.split('/').pop(), path: op.path, children: [] };
+                    ? { type: 'file', name: op.path.split('/').pop()!, path: op.path, content: op.content || '' }
+                    : { type: 'folder', name: op.path.split('/').pop()!, path: op.path, children: [] };
                 newFilesState.push(newItem); // Simplified: assumes root creation for now
             } else if (op.action === 'UPDATE_FILE') {
                  const updateRecursively = (items: FileSystemItem[]): FileSystemItem[] => items.map(item => 
-                    item.path === op.path && item.type === 'file' ? { ...item, content: op.content } :
+                    item.path === op.path && item.type === 'file' ? { ...item, content: op.content! } :
                     item.type === 'folder' ? { ...item, children: updateRecursively(item.children) } : item
                 );
                 newFilesState = updateRecursively(newFilesState);
@@ -276,7 +320,9 @@ Your task is to **${action}** this code.
   };
 
   const handleSend = async (prompt: string) => {
+    if (!prompt.trim()) return;
     setIsLoading(true);
+    setPrompt('');
     const userMessage: Message = { id: `user-${Date.now()}`, role: 'user', text: prompt };
     setMessages(prev => [...prev, userMessage]);
     
@@ -291,7 +337,7 @@ Your task is to **${action}** this code.
             config: { systemInstruction: persona.systemInstruction, responseMimeType: 'application/json' }
         });
         
-        const jsonResponse = JSON.parse(response.text);
+        const jsonResponse = JSON.parse(response.text) as AiResponse;
         processAiCommands(jsonResponse);
 
     } catch(e) {
@@ -322,7 +368,10 @@ Your task is to **${action}** this code.
     const [isOpen, setIsOpen] = useState(item.type === 'folder');
     const handleItemClick = () => {
         if (item.type === 'folder') setIsOpen(!isOpen);
-        else setActiveFile(item.path);
+        else {
+          setActiveFile(item.path);
+          if (isMobile) setMobileView('editor');
+        }
     };
     const Icon = item.type === 'folder' ? (isOpen ? FolderOpenIcon : FolderIcon) : FileIcon;
     return (
@@ -344,17 +393,12 @@ Your task is to **${action}** this code.
     );
   }
 
-  // FIX: Implemented useEffect hook to call handleRun on initial component mount.
-  // This ensures that the live preview and console are populated with the default
-  // project files as soon as the Code Canvas is loaded, providing a better user experience
-  // by preventing an empty initial state.
   useEffect(() => {
     handleRun();
   }, []);
 
-  return (
-    <div className="flex h-full bg-[var(--bg-primary)]">
-      <div className="w-56 bg-[var(--bg-secondary)] p-2 flex flex-col border-r border-white/10">
+  const FilePanel = () => (
+    <div className="w-full md:w-56 bg-[var(--bg-secondary)] p-2 flex flex-col border-r border-white/10 h-full">
         <div className='flex justify-between items-center p-2'>
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Files</h3>
             <div className='flex items-center gap-1'>
@@ -367,11 +411,14 @@ Your task is to **${action}** this code.
             {files.map(item => <FileTreeItem key={item.path} item={item} level={0} />)}
         </div>
       </div>
+  );
 
-      <div className="flex-1 flex flex-col">
+  const EditorPanel = () => (
+    <div className="flex-1 flex flex-col h-full">
         <div className="flex items-center justify-between bg-black/20 px-4 py-1.5 border-b border-white/10">
-            <span className="text-sm text-gray-400 font-mono">{currentFile?.path || 'No file selected'}</span>
-             <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400 font-mono truncate">{currentFile?.path || 'No file selected'}</span>
+             <div className="hidden md:flex items-center gap-2">
+                <button onClick={handleSuggestImprovements} disabled={currentFile?.type !== 'file' || isLoading} title="Suggest Improvements" className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"><TelescopeIcon className="w-4 h-4" /> Suggest</button>
                 <button onClick={() => handleCodeAction('refactor')} disabled={!selection.text || isLoading} title="Refactor Selection" className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"><WrenchIcon className="w-4 h-4" /> Refactor</button>
                 <button onClick={() => handleCodeAction('explain')} disabled={!selection.text || isLoading} title="Explain Selection" className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"><LightbulbIcon className="w-4 h-4" /> Explain</button>
                  <button onClick={() => handleCodeAction('optimize')} disabled={!selection.text || isLoading} title="Optimize Selection" className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"><ZapIcon className="w-4 h-4" /> Optimize</button>
@@ -386,15 +433,9 @@ Your task is to **${action}** this code.
             language={currentFile?.name.split('.').pop() || 'text'}
           />
         </div>
-        <Resizable
-            defaultSize={{ width: '100%', height: '40%' }}
-            minHeight="10%"
-            maxHeight="80%"
-            enable={{ top: true }}
-            className="border-t-2 border-[var(--accent-primary)]/30"
-            handleClasses={{top: "w-full h-2 top-0 cursor-row-resize flex justify-center items-center after:content-[''] after:w-10 after:h-1 after:bg-white/20 after:rounded-full"}}
-        >
-            <div className="bg-[#1e293b] h-full w-full flex flex-col">
+        { isMobile ? (
+          <div className="h-2/5 flex flex-col">
+              <div className="bg-[#1e293b] h-full w-full flex flex-col">
                 <div className="flex items-center justify-between bg-black/20 border-b border-white/10 pr-2">
                     <div className="flex">
                         <button onClick={() => setActiveTab('preview')} className={`px-4 py-2 text-sm ${activeTab === 'preview' ? 'bg-[#1e293b] text-white' : 'text-gray-400 hover:bg-white/5'}`}>Live Preview</button>
@@ -419,10 +460,48 @@ Your task is to **${action}** this code.
                     </div>
                 )}
             </div>
-        </Resizable>
-      </div>
-
-      <div className="w-96 bg-[var(--bg-secondary)] border-l border-white/10 flex flex-col">
+          </div>
+        ) : (
+          <Resizable
+              defaultSize={{ width: '100%', height: '40%' }}
+              minHeight="10%"
+              maxHeight="80%"
+              enable={{ top: true }}
+              className="border-t-2 border-[var(--accent-primary)]/30"
+              handleClasses={{top: "w-full h-2 top-0 cursor-row-resize flex justify-center items-center after:content-[''] after:w-10 after:h-1 after:bg-white/20 after:rounded-full"}}
+          >
+              <div className="bg-[#1e293b] h-full w-full flex flex-col">
+                  <div className="flex items-center justify-between bg-black/20 border-b border-white/10 pr-2">
+                      <div className="flex">
+                          <button onClick={() => setActiveTab('preview')} className={`px-4 py-2 text-sm ${activeTab === 'preview' ? 'bg-[#1e293b] text-white' : 'text-gray-400 hover:bg-white/5'}`}>Live Preview</button>
+                          <button onClick={() => setActiveTab('console')} className={`px-4 py-2 text-sm ${activeTab === 'console' ? 'bg-[#1e293b] text-white' : 'text-gray-400 hover:bg-white/5'}`}>Console</button>
+                      </div>
+                       {activeTab === 'console' && <button onClick={() => setConsoleMessages([])} className="text-xs text-gray-400 hover:text-white hover:bg-white/10 px-2 py-1 rounded">Clear</button>}
+                  </div>
+                  {activeTab === 'preview' ? (
+                      <iframe key={previewKey} srcDoc={generatePreviewSrcDoc()} title="Live Preview" sandbox="allow-scripts allow-modals allow-forms" className="w-full h-full bg-white"/>
+                  ) : (
+                      <div className="w-full h-full p-2 font-mono text-sm overflow-y-auto">
+                          {consoleMessages.map((msg, i) => {
+                             const Icon = msg.level === 'error' ? XCircleIcon : msg.level === 'warn' ? AlertTriangleIcon : InfoIcon;
+                             const color = msg.level === 'error' ? 'text-red-400' : msg.level === 'warn' ? 'text-yellow-400' : 'text-gray-300';
+                             return (
+                                 <div key={i} className={`flex items-start gap-2 py-1 border-b border-white/5 ${color}`}>
+                                     <Icon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                     <pre className="whitespace-pre-wrap flex-1">{msg.message}</pre>
+                                 </div>
+                             )
+                          })}
+                      </div>
+                  )}
+              </div>
+          </Resizable>
+        )}
+    </div>
+  );
+  
+  const ChatPanel = () => (
+    <div className="w-full md:w-96 bg-[var(--bg-secondary)] border-l border-white/10 flex flex-col h-full">
         <header className="p-3 border-b border-white/10 flex items-center gap-2 shrink-0">
             <CpuIcon className="w-6 h-6 text-[var(--accent-primary)]" />
             <h2 className="text-lg font-semibold text-white">Universal Compiler</h2>
@@ -430,9 +509,45 @@ Your task is to **${action}** this code.
         <div className="flex-1 overflow-y-auto">
             {messages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
         </div>
-        {/* FIX: Passed required `prompt` and `onPromptChange` props to the PromptInput component to resolve the type error. */}
         <PromptInput prompt={prompt} onPromptChange={setPrompt} onSend={handleSend} isLoading={isLoading} />
+    </div>
+  );
+
+  const MobileNavButton: React.FC<{
+    label: string;
+    icon: React.ComponentType<{className?: string}>;
+    view: typeof mobileView;
+    activeView: typeof mobileView;
+    onClick: (view: typeof mobileView) => void;
+  }> = ({ label, icon: Icon, view, activeView, onClick }) => (
+    <button onClick={() => onClick(view)} className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-colors ${activeView === view ? 'text-[var(--accent-primary)]' : 'text-gray-400'}`}>
+        <Icon className="w-6 h-6"/>
+        <span className="text-xs">{label}</span>
+    </button>
+  );
+
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-full bg-[var(--bg-primary)]">
+        <div className="flex-1 min-h-0">
+          {mobileView === 'files' && <FilePanel />}
+          {mobileView === 'editor' && <EditorPanel />}
+          {mobileView === 'chat' && <ChatPanel />}
+        </div>
+        <div className="flex justify-around items-center p-1 bg-[var(--bg-secondary)] border-t border-white/10 shrink-0">
+          <MobileNavButton label="Files" icon={FileIcon} view="files" activeView={mobileView} onClick={setMobileView} />
+          <MobileNavButton label="Editor" icon={CodeIcon} view="editor" activeView={mobileView} onClick={setMobileView} />
+          <MobileNavButton label="AI Chat" icon={CpuIcon} view="chat" activeView={mobileView} onClick={setMobileView} />
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full bg-[var(--bg-primary)]">
+      <FilePanel />
+      <EditorPanel />
+      <ChatPanel />
     </div>
   );
 };

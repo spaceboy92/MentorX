@@ -27,7 +27,7 @@ const ColorInput: React.FC<{ label: string; value: string; onChange: (value: str
 const TabButton: React.FC<{ Icon: React.ComponentType<{ className?: string }>; label: string; isActive: boolean; onClick: () => void }> = ({ Icon, label, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors w-full text-left ${
+    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors w-full text-left shrink-0 ${
       isActive
         ? 'bg-white/10 text-white'
         : 'text-[var(--text-secondary)] hover:bg-white/5 hover:text-white'
@@ -131,26 +131,29 @@ const SettingsModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center" onClick={toggleSettings}>
-      <div className="bg-panel w-full max-w-4xl rounded-2xl shadow-2xl border border-white/10 flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="w-56 p-4 border-r border-white/10 shrink-0">
-            <h2 className="text-lg font-semibold mb-4 px-2">Settings</h2>
-            <div className='space-y-1'>
+      <div className="bg-panel w-full max-w-4xl rounded-2xl shadow-2xl border border-white/10 flex flex-col md:flex-row max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="w-full md:w-56 p-4 border-b md:border-b-0 md:border-r border-white/10 shrink-0">
+            <h2 className="text-lg font-semibold mb-4 px-2 hidden md:block">Settings</h2>
+            <div className='flex gap-1 overflow-x-auto md:flex-col md:space-y-1'>
                 <TabButton Icon={PaletteIcon} label="Appearance" isActive={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} />
                 <TabButton Icon={UserCircleIcon} label="Account" isActive={activeTab === 'account'} onClick={() => setActiveTab('account')} />
             </div>
         </div>
 
         <div className="flex-1 flex flex-col">
-            <header className="flex items-center justify-end p-2 shrink-0">
+            <header className="flex items-center justify-between p-2 shrink-0 md:justify-end">
+              <h2 className="text-lg font-semibold px-2 md:hidden">
+                {activeTab === 'appearance' ? 'Appearance' : 'Account'}
+              </h2>
               <button onClick={toggleSettings} className="p-2 rounded-full hover:bg-white/10">
                 <XIcon className="w-5 h-5" />
               </button>
             </header>
             
-            <div className="flex-1 p-6 pt-0 overflow-y-auto" style={{maxHeight: '80vh'}}>
+            <div className="flex-1 p-6 pt-0 overflow-y-auto">
                 {activeTab === 'appearance' && (
                   <div className="space-y-8">
-                    <h3 className="text-xl font-semibold text-white">Appearance</h3>
+                    <h3 className="text-xl font-semibold text-white hidden md:block">Appearance</h3>
                     
                     {/* Background Settings */}
                     <div className="space-y-3">
@@ -209,7 +212,7 @@ const SettingsModal: React.FC = () => {
 
                 {activeTab === 'account' && (
                      <div>
-                        <h3 className="text-xl font-semibold mb-4 text-white">Account</h3>
+                        <h3 className="text-xl font-semibold mb-4 text-white hidden md:block">Account</h3>
                         {currentUser ? (
                              <div className="p-6 bg-black/20 rounded-lg border border-white/10">
                                 <div className='flex items-center gap-4'>

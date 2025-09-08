@@ -4,11 +4,11 @@ export interface Message {
   text: string;
   image?: string; // base64 encoded image
   citations?: { uri: string; title: string }[];
-  type?: 'chat' | 'summary' | 'image';
+  type?: 'chat' | 'summary' | 'image' | 'tool';
 }
 
 export interface Persona {
-  id: string;
+  id:string;
   name: string;
   description: string;
   systemInstruction: string;
@@ -78,14 +78,6 @@ export interface ImageRecord {
   timestamp: number;
 }
 
-export interface VideoRecord {
-  id: string;
-  prompt: string;
-  url: string; // This will be the blob URL
-  timestamp: number;
-}
-
-
 export interface CustomBackground {
   url: string;
   dimness: number; // 0 to 1
@@ -100,6 +92,16 @@ export interface MediaAsset {
   duration: number; // in seconds
   element: HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
 }
+export interface ClipEffect {
+  id: string;
+  type: 'brightness' | 'contrast' | 'grayscale';
+  value: number; // e.g., 0-200 for brightness/contrast, 0-100 for grayscale
+}
+
+export interface ClipTransition {
+  type: 'crossfade';
+  duration: number; // in seconds
+}
 
 export interface TimelineClip {
   id: string;
@@ -113,7 +115,10 @@ export interface TimelineClip {
   timelineStart: number;
   // Calculated properties
   duration: number;
+  effects: ClipEffect[];
+  transition?: ClipTransition; // Transition leading out of this clip
 }
+
 
 export interface TimelineTrack {
   id: string;
@@ -130,12 +135,14 @@ export interface AppContextType {
   toggleRightSidebar: () => void;
   isFocusMode: boolean;
   setFocusMode: (focus: boolean) => void;
+  notes: string;
+  setNotes: (notes: string) => void;
   sessions: Omit<Session, 'messages'>[];
   activeSessionId: string | null;
   selectSession: (sessionId: string | null) => void;
-  createNewSession: (personaId: string, initialMessages?: Message[]) => void;
+  createNewSession: (personaId: string, initialMessages?: Message[]) => string;
   updateMessagesForActiveSession: (messages: Message[]) => void;
-  deleteSession: (sessionId: string) => void;
+  deleteSession: (sessionId: string) => { nextSessionId: string | null };
   renameSession: (sessionId: string, newName: string) => void;
   isSettingsOpen: boolean;
   toggleSettings: () => void;
@@ -159,8 +166,6 @@ export interface AppContextType {
   editingPersona: Persona | null;
   generatedImages: ImageRecord[];
   addGeneratedImage: (image: Omit<ImageRecord, 'id' | 'timestamp'>) => void;
-  generatedVideos: VideoRecord[];
-  addGeneratedVideo: (video: Omit<VideoRecord, 'id' | 'timestamp'>) => void;
   consumeToken: () => void;
   isOutOfTokens: boolean;
   secondsUntilTokenRegen: number;

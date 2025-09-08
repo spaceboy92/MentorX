@@ -57,6 +57,17 @@
   .blinking-cursor {
     animation: blink 1s step-end infinite;
   }
+  @keyframes barrel-roll {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .animate-barrel-roll {
+    animation: barrel-roll 1s ease-in-out;
+  }
 </style>
 </head>
   <body>

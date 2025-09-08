@@ -5,7 +5,6 @@ import PromptInput from '../components/PromptInput';
 import type { Message, Widget } from '../types';
 import { GoogleGenAI, Type } from "@google/genai";
 import { useAppContext } from '../contexts/AppContext';
-// FIX: Changed import from PERSONAS to DEFAULT_PERSONAS as PERSONAS is not an exported member.
 import { DEFAULT_PERSONAS } from '../constants';
 
 const WidgetFactory: React.FC = () => {
@@ -14,7 +13,6 @@ const WidgetFactory: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [widgetVariations, setWidgetVariations] = useState<Widget[]>([]);
-  // FIX: Added state to control the prompt input value, which is a required prop for PromptInput.
   const [prompt, setPrompt] = useState('');
 
   const isWidgetPinned = activeWidget ? pinnedWidgets.some(w => w.id === activeWidget.id) : false;
@@ -24,7 +22,6 @@ const WidgetFactory: React.FC = () => {
     setIsLoading(true);
     setWidgetVariations([]);
     
-    // Find the first user message to use as the base prompt
     const basePrompt = messages.find(m => m.role === 'user')?.text;
     if (!basePrompt) {
         setIsLoading(false);
@@ -45,17 +42,20 @@ const WidgetFactory: React.FC = () => {
                             type: Type.ARRAY,
                             items: { type: Type.STRING }
                         }
-                    }
+                    },
+                    required: ['variations']
                 }
             }
         });
         const parsed = JSON.parse(response.text);
-        const variations: Widget[] = parsed.variations.map((html: string, index: number) => ({
-            id: `var-${activeWidget.id}-${index}`,
-            name: `${activeWidget.name} - Var ${index + 1}`,
-            html: html,
-        }));
-        setWidgetVariations(variations);
+        if (parsed.variations && Array.isArray(parsed.variations)) {
+            const variations: Widget[] = parsed.variations.map((html: string, index: number) => ({
+                id: `var-${activeWidget.id}-${index}`,
+                name: `${activeWidget.name} - Var ${index + 1}`,
+                html: html,
+            }));
+            setWidgetVariations(variations);
+        }
 
     } catch (error) {
         console.error("Failed to generate variations:", error);
@@ -65,7 +65,9 @@ const WidgetFactory: React.FC = () => {
   };
 
   const handleSend = async (prompt: string) => {
+    if (!prompt.trim()) return;
     setIsLoading(true);
+    setPrompt('');
     setWidgetVariations([]);
     const userMessage: Message = { id: Date.now().toString(), role: 'user', text: prompt };
     const currentMessages = [...messages, userMessage];
@@ -123,13 +125,14 @@ const WidgetFactory: React.FC = () => {
     setActiveWidget(null);
     setMessages([]);
     setWidgetVariations([]);
+    setPrompt('');
   }
 
   return (
-    <div className="flex h-full bg-[var(--bg-primary)]">
+    <div className="flex flex-col md:flex-row h-full bg-[var(--bg-primary)]">
       {/* Live Renderer */}
-      <div className="flex-1 flex flex-col p-8 bg-grid-pattern overflow-auto relative">
-        <div className="absolute top-4 right-4 z-10 flex gap-2">
+      <div className="flex-1 md:h-full flex flex-col p-4 md:p-8 bg-grid-pattern overflow-auto relative">
+        <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2">
             <button onClick={handleClear} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-full bg-white/10 text-gray-300 hover:bg-white/20 transition-all disabled:opacity-50">
                 <RotateCcwIcon className="w-4 h-4"/>
                 <span>Clear</span>
@@ -148,11 +151,11 @@ const WidgetFactory: React.FC = () => {
             )}
         </div>
         
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center min-h-[200px]">
             {activeWidget ? (
               <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: activeWidget.html }} />
             ) : (
-              <div className="text-center text-gray-500">
+              <div className="text-center text-gray-500 p-4">
                 <LayoutTemplateIcon className="w-24 h-24 mx-auto mb-4" />
                 <p>Your generated widget will appear here.</p>
                 <p className="text-xs mt-2">Try asking for "an animated login form" or "a pricing table with a toggle".</p>
@@ -163,7 +166,7 @@ const WidgetFactory: React.FC = () => {
         {widgetVariations.length > 0 && (
             <div className="flex-shrink-0 mt-4">
                 <h3 className="text-center font-semibold text-white mb-2">Variations</h3>
-                <div className="flex gap-4 justify-center p-4 bg-black/20 rounded-lg">
+                <div className="flex flex-wrap gap-4 justify-center p-4 bg-black/20 rounded-lg">
                     {widgetVariations.map(v => (
                         <div key={v.id} onClick={() => setActiveWidget(v)} className="w-48 h-32 bg-white rounded-md overflow-hidden cursor-pointer border-2 border-transparent hover:border-[var(--accent-primary)] transition-all">
                              <div className="transform scale-[0.2] origin-top-left w-[960px] h-[640px]">
@@ -177,7 +180,7 @@ const WidgetFactory: React.FC = () => {
       </div>
 
       {/* AI Chat Panel */}
-      <div className="w-96 bg-[var(--bg-secondary)] border-l border-white/10 flex flex-col">
+      <div className="w-full h-1/2 md:h-full md:w-96 bg-[var(--bg-secondary)] border-l border-white/10 flex flex-col">
         <header className="p-3 border-b border-white/10 flex items-center gap-2 shrink-0">
             <LayoutTemplateIcon className="w-6 h-6 text-[var(--accent-primary)]" />
             <h2 className="text-lg font-semibold text-white">Widget Prototyping</h2>
@@ -190,7 +193,6 @@ const WidgetFactory: React.FC = () => {
             )}
             {messages.filter(m => !m.text.trim().startsWith('<')).map(msg => <ChatMessage key={msg.id} message={msg} />)}
         </div>
-        {/* FIX: Passed required `prompt` and `onPromptChange` props to the PromptInput component to resolve the type error. */}
         <PromptInput prompt={prompt} onPromptChange={setPrompt} onSend={handleSend} isLoading={isLoading} />
       </div>
     </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { XIcon, LayoutTemplateIcon, PinIcon, ImageIcon, ClapperboardIcon } from './icons/Icons';
-import type { Widget, ImageRecord, VideoRecord } from '../types';
+import { XIcon, LayoutTemplateIcon, PinIcon, ImageIcon, ClapperboardIcon, StickyNoteIcon } from './icons/Icons';
+import type { Widget, ImageRecord } from '../types';
 
 const PinnedWidget: React.FC<{ widget: Widget }> = ({ widget }) => (
   <div className="bg-black/20 p-2 rounded-lg border border-white/10 group relative">
@@ -23,35 +23,36 @@ const GeneratedImage: React.FC<{ image: ImageRecord }> = ({ image }) => (
     </div>
 );
 
-const GeneratedVideo: React.FC<{ video: VideoRecord }> = ({ video }) => (
-    <div className="bg-black/20 rounded-lg border border-white/10 group relative overflow-hidden">
-        <video src={video.url} className="w-full h-auto aspect-square object-cover bg-black" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-            <p className="text-white text-xs line-clamp-2">{video.prompt}</p>
-        </div>
-    </div>
-);
-
-
 const RightSidebar: React.FC = () => {
-  const { isRightSidebarOpen, toggleRightSidebar, pinnedWidgets, generatedImages, generatedVideos } = useAppContext();
+  const { isRightSidebarOpen, toggleRightSidebar, pinnedWidgets, generatedImages, notes, setNotes } = useAppContext();
 
   return (
     <aside className={`
       bg-panel border-l border-white/10 shadow-2xl h-full w-full
-      md:fixed md:top-0 md:right-0 md:h-full md:z-30 md:transition-transform md:duration-300 md:ease-in-out md:w-64 
-      ${isRightSidebarOpen ? 'md:translate-x-0' : 'md:translate-x-full'}
-      
-      lg:relative lg:translate-x-0 lg:w-full
+      fixed top-0 right-0 h-full z-30 w-[85%] max-w-xs transition-transform duration-300 ease-in-out
+      ${isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+      lg:relative lg:translate-x-0 lg:w-full lg:max-w-none
     `}>
       <div className="flex flex-col h-full">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <h2 className="text-lg font-semibold text-white">Workspace</h2>
-          <button onClick={toggleRightSidebar} className="p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 md:hidden">
+          <button onClick={toggleRightSidebar} className="p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 lg:hidden">
             <XIcon className="w-6 h-6" />
           </button>
         </div>
         <div className="flex-1 p-4 space-y-6 overflow-y-auto">
+          <div>
+            <h3 className="mb-4 text-sm font-semibold tracking-wider text-gray-400 uppercase flex items-center gap-2">
+                <StickyNoteIcon className="w-4 h-4"/>
+                Scratchpad
+            </h3>
+             <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Jot down your notes here... They are saved automatically."
+                className="w-full h-32 bg-black/20 border border-white/10 rounded-lg p-2 text-sm text-[var(--text-secondary)] resize-none focus:outline-none focus:border-[var(--accent-primary)] transition-colors"
+            />
+          </div>
           <div>
             <h3 className="mb-4 text-sm font-semibold tracking-wider text-gray-400 uppercase flex items-center gap-2">
                 <PinIcon className="w-4 h-4"/>
@@ -87,27 +88,7 @@ const RightSidebar: React.FC = () => {
                 <div className="text-center py-4 px-2 border border-dashed border-white/10 rounded-lg">
                     <ImageIcon className="w-8 h-8 mx-auto text-gray-600 mb-2"/>
                     <p className="text-xs text-gray-500">
-                        Generated images will appear here. Try the `/imagine` command!
-                    </p>
-                </div>
-            )}
-          </div>
-           <div>
-            <h3 className="mb-4 text-sm font-semibold tracking-wider text-gray-400 uppercase flex items-center gap-2">
-                <ClapperboardIcon className="w-4 h-4"/>
-                Video Library
-            </h3>
-            {generatedVideos.length > 0 ? (
-                 <div className="grid grid-cols-2 gap-2">
-                    {generatedVideos.map(video => (
-                        <GeneratedVideo key={video.id} video={video} />
-                    ))}
-                </div>
-            ) : (
-                <div className="text-center py-4 px-2 border border-dashed border-white/10 rounded-lg">
-                    <ClapperboardIcon className="w-8 h-8 mx-auto text-gray-600 mb-2"/>
-                    <p className="text-xs text-gray-500">
-                        Generated videos will appear here. Create some in the Video Studio!
+                        Generated images will appear here. Try asking the AI to generate one!
                     </p>
                 </div>
             )}

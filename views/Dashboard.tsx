@@ -1,21 +1,35 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getPersonas } from '../constants';
-import type { Persona, Widget, Message } from '../types';
+import type { Persona, Widget } from '../types';
 import { useAppContext } from '../contexts/AppContext';
-import { XIcon, ZapIcon, PencilIcon, Trash2Icon } from '../components/icons/Icons';
+import { XIcon, PencilIcon, Trash2Icon } from '../components/icons/Icons';
 
 const PersonaCard: React.FC<{ persona: Persona }> = ({ persona }) => {
   const navigate = useNavigate();
-  const { createNewSession, openPersonaModal, deleteCustomPersona } = useAppContext();
+  const { createNewSession, openPersonaModal, deleteCustomPersona, sessions, selectSession } = useAppContext();
 
   const handleClick = () => {
     if (persona.id === 'custom-persona') {
       openPersonaModal();
       return;
     }
+
+    // Special handling for the video editor to ensure it gets a session
+    if (persona.workspace === 'video') {
+      const existingVideoSession = sessions.find(s => s.personaId === 'video-studio');
+      if (existingVideoSession) {
+        selectSession(existingVideoSession.id);
+      } else {
+        createNewSession('video-studio');
+      }
+      // The sidebar's useEffect will handle navigation
+      return;
+    }
     
-    createNewSession(persona.id);
+    const newSessionId = createNewSession(persona.id);
+    selectSession(newSessionId);
+
     if (persona.workspace === 'chat') {
       navigate(`/chat/${persona.id}`);
     } else if (persona.workspace === 'code') {
@@ -79,46 +93,12 @@ const PinnedWidgetCard: React.FC<{ widget: Widget, onUnpin: (id: string) => void
     );
 };
 
-const QuickActionCard: React.FC<{ title: string, description: string, onClick: () => void }> = ({ title, description, onClick }) => {
-    return (
-        <button onClick={onClick} className="text-left bg-[var(--bg-secondary)]/60 p-4 rounded-xl border border-white/10 hover:border-[var(--accent-secondary)]/50 hover:bg-[var(--bg-secondary)] transition-all duration-300 group shadow-lg hover:shadow-[var(--accent-secondary)]/10 transform hover:-translate-y-1">
-            <div className="flex items-start gap-3">
-                <div className="p-1.5 bg-white/10 rounded-lg mt-1">
-                    <ZapIcon className="w-5 h-5 text-[var(--accent-secondary)]"/>
-                </div>
-                <div>
-                    <h3 className="font-bold text-white">{title}</h3>
-                    <p className="text-sm text-[var(--text-secondary)]/80">{description}</p>
-                </div>
-            </div>
-        </button>
-    );
-};
-
-
 const Dashboard: React.FC = () => {
-  const { pinnedWidgets, unpinWidget, createNewSession, customPersonas, setCustomBackground } = useAppContext();
-  const navigate = useNavigate();
-
+  const { pinnedWidgets, unpinWidget, customPersonas, setCustomBackground } = useAppContext();
+  
   useEffect(() => {
-    setCustomBackground({
-      url: 'https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-      dimness: 0.85,
-    });
+    setCustomBackground(null);
   }, [setCustomBackground]);
-
-  const handleQuickAction = (personaId: string, prompt: string) => {
-    const initialMessage: Message = { id: `user-${Date.now()}`, role: 'user', text: prompt };
-    createNewSession(personaId, [initialMessage]);
-    navigate(`/chat/${personaId}`);
-  };
-
-  const quickActions = [
-      { title: 'Draft an Email', description: 'Start writing a professional email', action: () => handleQuickAction('mentorx-general', 'Draft an email to my team about the new project update.') },
-      { title: 'Explain a Concept', description: 'Get a clear explanation of any topic', action: () => handleQuickAction('mentorx-general', 'Explain the concept of quantum computing in simple terms.') },
-      { title: 'Write a Poem', description: 'Unleash your inner poet', action: () => handleQuickAction('mentorx-general', 'Write a short poem about the rain.') },
-      { title: 'Plan a Trip', description: 'Outline an itinerary for your next vacation', action: () => handleQuickAction('mentorx-general', 'Create a 3-day itinerary for a trip to Tokyo.') },
-  ];
 
   const personas = getPersonas(customPersonas);
 
@@ -132,20 +112,13 @@ const Dashboard: React.FC = () => {
           </p>
         </div>
 
-        <div className="mb-12">
-            <h2 className="text-2xl font-bold text-white mb-4 text-center">Quick Actions</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {quickActions.map(action => <QuickActionCard key={action.title} {...action} onClick={action.action} />)}
-            </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
           {personas.map((persona) => (
             <PersonaCard key={persona.id} persona={persona} />
           ))}
         </div>
 
-        <div className="mt-12">
+        <div>
             <h2 className="text-2xl font-bold text-white mb-4 text-center">Pinned Widgets</h2>
             {pinnedWidgets.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

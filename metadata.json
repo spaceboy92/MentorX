@@ -1,7 +1,5 @@
 {
   "name": "MentorX - AI Workspace",
   "description": "An all-in-one, AI-powered workspace designed for developers, creators, and students. It combines a versatile chat interface with specialized tools like a live coding environment and a UI widget generator.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "requestFramePermissions": []
 }

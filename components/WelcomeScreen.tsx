@@ -8,11 +8,11 @@ const WelcomeScreen: React.FC = () => {
     useEffect(() => {
         const animationTimer = setTimeout(() => {
             setIsAnimatingOut(true);
-        }, 3000);
+        }, 9000); // Extended from 3s to 9s
 
         const removalTimer = setTimeout(() => {
             setIsGone(true);
-        }, 4000);
+        }, 10000); // Extended from 4s to 10s
 
         return () => {
             clearTimeout(animationTimer);
@@ -47,9 +47,15 @@ const WelcomeScreen: React.FC = () => {
                     animation: draw-and-pop 0.7s ease-out 1.5s forwards;
                 }
                 
-                .welcome-text {
+                .welcome-text, .welcome-subtitle {
                     opacity: 0;
-                    animation: fade-in-text 0.8s ease-in forwards 2.2s;
+                    animation: fade-in-text 0.8s ease-in forwards;
+                }
+                .welcome-text {
+                    animation-delay: 2.2s;
+                }
+                .welcome-subtitle {
+                    animation-delay: 2.4s;
                 }
 
                 @keyframes draw-logo-path {
@@ -79,7 +85,10 @@ const WelcomeScreen: React.FC = () => {
             >
                 <div className="flex flex-col items-center gap-4">
                     <MentorXLogoIcon className="w-40 h-40 logo-animate" />
-                    <h1 className="text-5xl font-bold text-white welcome-text tracking-widest -mt-4">MentorX</h1>
+                    <div className="text-center">
+                        <h1 className="text-5xl font-bold text-white welcome-text tracking-widest -mt-4">MentorX</h1>
+                        <p className="text-lg text-[var(--text-secondary)] welcome-subtitle mt-2">an AI by the backbencher</p>
+                    </div>
                 </div>
             </div>
         </>

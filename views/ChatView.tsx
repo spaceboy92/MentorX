@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import type { Message, Persona, Session } from '../types';
-import { getPersonas, AVAILABLE_TOOLS_PRO } from '../constants';
+import { getPersonas, AVAILABLE_TOOLS_PRO, THEMES } from '../constants';
 import { callGeminiModel, generateImage, generateSummary, performWebSearch } from '../services/geminiService';
 import ChatMessage from '../components/ChatMessage';
 import PromptInput, { PromptInputRef } from '../components/PromptInput';
 import FloatingToolbar from '../components/FloatingToolbar';
 import ToggleSwitch from '../components/ui/ToggleSwitch';
 import { useAppContext } from '../contexts/AppContext';
-import { MenuIcon, PanelRightOpenIcon, ZapIcon, LockIcon, BookTextIcon, BotIcon } from '../components/icons/Icons';
+import { MenuIcon, PanelRightOpenIcon, ZapIcon, LockIcon, BookTextIcon, BotIcon, DownloadIcon } from '../components/icons/Icons';
 
 const MESSAGES_PER_PAGE = 30;
 
@@ -41,6 +41,7 @@ const messagesToGeminiHistory = (messages: Message[]) => {
 const ChatView: React.FC = () => {
   const { personaId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const { 
     activeSessionId, 
@@ -53,6 +54,7 @@ const ChatView: React.FC = () => {
     consumeToken,
     isOutOfTokens,
     secondsUntilTokenRegen,
+    setTheme,
   } = useAppContext();
 
   const [persona, setPersona] = useState<Persona | null>(null);
@@ -92,66 +94,23 @@ const ChatView: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [activeSessionId, updateMessagesForActiveSession]);
 
-  // Load session data (persona and messages)
-  useEffect(() => {
-    const activeSessionInfo = sessions.find(s => s.id === activeSessionId);
-    if(activeSessionInfo) {
-        const allPersonas = getPersonas(customPersonas);
-        const foundPersona = allPersonas.find(p => p.id === activeSessionInfo.personaId);
-        if (foundPersona) {
-          setPersona(foundPersona);
-          // Load full messages from localStorage for the active session
-          const allSessionsFromStorage: Session[] = JSON.parse(localStorage.getItem('mentorx-sessions') || '[]');
-          const fullActiveSession = allSessionsFromStorage.find(s => s.id === activeSessionId);
-          setMessages(fullActiveSession ? fullActiveSession.messages : []);
-          setPage(1); // Reset pagination on session change
-        } else {
-          navigate('/');
-        }
-    } else {
-        if (personaId) { 
-           navigate('/');
-        }
-    }
-  }, [activeSessionId, sessions, navigate, personaId, customPersonas]);
-
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-  
-  useEffect(scrollToBottom, [messages, isLoading]);
-  
-  const handleStop = () => {
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        setIsLoading(false);
-    }
-  };
-  
-  const handleSummarize = async () => {
-    if (messages.length < 2 || isLoading || isSummarizing) return;
-    setIsSummarizing(true);
-    try {
-      const summaryText = await generateSummary(messages);
-      const summaryMessage: Message = {
-        id: `summary-${Date.now()}`,
-        role: 'model',
-        text: summaryText,
-        type: 'summary',
-      };
-      const newMessages = [...messages, summaryMessage];
-      setMessages(newMessages);
-      updateMessagesForActiveSession(newMessages);
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
-      setError(`Failed to generate summary: ${errorMessage}`);
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-  
   const handleSend = useCallback(async (currentPrompt: string, image?: { data: string; type: string }) => {
-    if (!persona || (!currentPrompt.trim() && !image) || isOutOfTokens) return;
+    const trimmedPrompt = currentPrompt.trim();
+    
+    // Client-side easter egg commands
+    if (trimmedPrompt.toLowerCase() === '/hackermode on') {
+      const hackerTheme = THEMES.find(t => t.name === 'Hacker');
+      if (hackerTheme) setTheme(hackerTheme);
+      setPrompt('');
+      return;
+    }
+    if (trimmedPrompt.toLowerCase() === '/hackermode off') {
+      setTheme(THEMES[0]); // Reset to default Aurora theme
+      setPrompt('');
+      return;
+    }
+
+    if (!persona || (!trimmedPrompt && !image) || isOutOfTokens) return;
 
     consumeToken();
     setIsLoading(true);
@@ -160,7 +119,7 @@ const ChatView: React.FC = () => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      text: currentPrompt,
+      text: trimmedPrompt,
       image: image ? `data:${image.type};base64,${image.data}` : undefined,
     };
     
@@ -204,21 +163,25 @@ const ChatView: React.FC = () => {
 
         const toolResponseParts = [];
         let toolCallIndicatorMessageId: string | null = null;
+        const tempMessages = [...messagesRef.current];
 
         for (const toolCallPart of toolCallParts) {
             const { name, args } = toolCallPart.functionCall;
             if (name === 'generateImage') {
-                // FIX: Cast `args.prompt` to a string to resolve potential 'unknown' type errors.
                 const promptText = String(args.prompt);
-                const indicatorMessage: Message = { id: `tool-call-${Date.now()}`, role: 'model', text: `Generating an image for: "${promptText}"` };
+                const indicatorMessage: Message = { id: `tool-call-${Date.now()}`, type: 'tool', role: 'model', text: `Generating an image for: "${promptText}"` };
                 toolCallIndicatorMessageId = indicatorMessage.id;
                 setMessages(prev => [...prev, indicatorMessage]);
+                tempMessages.push(indicatorMessage);
                 
                 const imageUrl = await generateImage(promptText);
                 
                 const imageMessage: Message = { id: `img-${Date.now()}`, role: 'model', type: 'image', text: promptText, image: imageUrl };
                 addGeneratedImage({ prompt: promptText, url: imageUrl });
-                setMessages(prev => [...prev.filter(m => m.id !== toolCallIndicatorMessageId), imageMessage]);
+                
+                const finalMessages = tempMessages.filter(m => m.id !== toolCallIndicatorMessageId);
+                finalMessages.push(imageMessage);
+                setMessages(finalMessages);
                 
                 toolResponseParts.push({
                     functionResponse: {
@@ -228,13 +191,13 @@ const ChatView: React.FC = () => {
                 });
             } else if (name === 'searchWeb') {
                 const query = String(args.query);
-                const indicatorMessage: Message = { id: `tool-call-${Date.now()}`, role: 'model', text: `Searching the web for: "${query}"` };
+                const indicatorMessage: Message = { id: `tool-call-${Date.now()}`, type: 'tool', role: 'model', text: `Searching the web for: "${query}"` };
                 toolCallIndicatorMessageId = indicatorMessage.id;
                 setMessages(prev => [...prev, indicatorMessage]);
+                tempMessages.push(indicatorMessage);
 
                 const searchResult = await performWebSearch(query);
                 
-                // Remove indicator message
                 setMessages(prev => prev.filter(m => m.id !== toolCallIndicatorMessageId));
 
                 accumulatedCitations.push(...searchResult.citations);
@@ -263,7 +226,106 @@ const ChatView: React.FC = () => {
         setIsLoading(false);
     }
 
-  }, [persona, messages, useDeepAnalysis, updateMessagesForActiveSession, addGeneratedImage, consumeToken, isOutOfTokens]);
+  }, [persona, messages, useDeepAnalysis, updateMessagesForActiveSession, addGeneratedImage, consumeToken, isOutOfTokens, setTheme]);
+
+
+  // Load session data (persona and messages)
+  useEffect(() => {
+    const activeSessionInfo = sessions.find(s => s.id === activeSessionId);
+    if(activeSessionInfo) {
+        const allPersonas = getPersonas(customPersonas);
+        const foundPersona = allPersonas.find(p => p.id === activeSessionInfo.personaId);
+        if (foundPersona) {
+          setPersona(foundPersona);
+          // Load full messages from localStorage for the active session
+          const allSessionsFromStorage: Session[] = JSON.parse(localStorage.getItem('mentorx-sessions') || '[]');
+          const fullActiveSession = allSessionsFromStorage.find(s => s.id === activeSessionId);
+          const loadedMessages = fullActiveSession ? fullActiveSession.messages : [];
+          setMessages(loadedMessages);
+          setPage(1); // Reset pagination on session change
+
+          // Handle initial prompt from Dashboard Quick Actions
+          if (location.state?.initialPrompt) {
+            setPrompt(location.state.initialPrompt);
+            // Clear state to prevent re-populating on refresh/re-render
+            navigate(location.pathname, { replace: true, state: {} });
+          }
+
+        } else {
+          navigate('/');
+        }
+    } else {
+        if (personaId) { 
+           navigate('/');
+        }
+    }
+  }, [activeSessionId, sessions, navigate, personaId, customPersonas, location]);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+  
+  useEffect(scrollToBottom, [messages, isLoading]);
+  
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        setIsLoading(false);
+    }
+  };
+  
+  const handleSummarize = async () => {
+    if (messages.length < 2 || isLoading || isSummarizing) return;
+    setIsSummarizing(true);
+    try {
+      const summaryText = await generateSummary(messages);
+      const summaryMessage: Message = {
+        id: `summary-${Date.now()}`,
+        role: 'model',
+        text: summaryText,
+        type: 'summary',
+      };
+      const newMessages = [...messages, summaryMessage];
+      setMessages(newMessages);
+      updateMessagesForActiveSession(newMessages);
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+      setError(`Failed to generate summary: ${errorMessage}`);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+  
+  const handleExportChat = () => {
+    if (!activeSessionId) return;
+    const activeSession = sessions.find(s => s.id === activeSessionId);
+    if (!activeSession) return;
+
+    const formattedContent = messages.map(msg => {
+        if (msg.type === 'summary') return `## Summary\n\n${msg.text}`;
+        const prefix = msg.role === 'user' ? '👤 User' : '🤖 MentorX';
+        let content = `### ${prefix}\n\n`;
+        if (msg.text) content += `${msg.text}\n\n`;
+        if (msg.image) content += `![Image Attached]\n\n`;
+        if (msg.citations) {
+            content += '**Sources:**\n';
+            msg.citations.forEach(c => {
+                content += `- [${c.title}](${c.uri})\n`;
+            });
+        }
+        return content;
+    }).join('---\n\n');
+
+    const blob = new Blob([formattedContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${activeSession.name.replace(/\s/g, '_')}_${new Date().toISOString()}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
 
   const displayedMessages = messages.slice(-page * MESSAGES_PER_PAGE);
@@ -318,6 +380,9 @@ const ChatView: React.FC = () => {
               <ZapIcon className="w-4 h-4 text-gray-400" />
               <ToggleSwitch label="Deep Analysis" checked={useDeepAnalysis} onChange={setUseDeepAnalysis} />
           </div>
+          <button onClick={handleExportChat} title="Export Chat" disabled={messages.length === 0} className="p-2 rounded-full hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
+            <DownloadIcon className="w-5 h-5" />
+          </button>
           <button onClick={handleSummarize} title="Summarize Conversation" disabled={isLoading || isSummarizing || messages.length < 2} className="p-2 rounded-full hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed">
             {isSummarizing ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin"></div> : <BookTextIcon className="w-5 h-5" />}
           </button>
@@ -341,7 +406,7 @@ const ChatView: React.FC = () => {
             message={msg} 
           />
         ))}
-        {isLoading && (
+        {isLoading && messages[messages.length - 1]?.role === 'user' && (
              <div className="flex items-start gap-4 p-4">
                  <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-cyan-500/20">
                     <BotIcon className="w-5 h-5 text-[var(--accent-primary)]" />
@@ -376,7 +441,7 @@ const ChatView: React.FC = () => {
             ref={promptInputRef}
             prompt={prompt}
             onPromptChange={setPrompt}
-            onSend={handleSend} 
+            onSend={(p, img) => handleSend(p, img)} 
             isLoading={isLoading} 
             onStop={handleStop} 
             disabled={isOutOfTokens}

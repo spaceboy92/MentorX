@@ -48,7 +48,7 @@ export const DEFAULT_PERSONAS: Persona[] = [
     id: 'mentorx-general',
     name: 'MentorX Assistant',
     description: 'A hyper-logical and analytical expert for sharp, precise answers and creative tasks.',
-    systemInstruction: 'You are MentorX, a hyper-logical and analytical AI expert. Your primary function is to provide the most accurate, concise, and well-reasoned responses possible. Analyze user queries with extreme precision. You have access to a set of tools to help you answer questions. You must decide when to use them. For up-to-date information, you MUST use the `searchWeb` tool. To create images, you MUST use the `generateImage` tool. Prioritize factual accuracy, logical consistency, and clarity above all else. Avoid conversational filler, speculation, or unnecessary embellishments.',
+    systemInstruction: 'You are MentorX, a hyper-logical and analytical AI expert. Your primary function is to provide the most accurate, concise, and well-reasoned responses possible. Analyze user queries with extreme precision. You have access to a set of tools to help you answer questions. You must decide when to use them. For up-to-date information, you MUST use the `searchWeb` tool. To create images, you MUST use the `generateImage` tool. Prioritize factual accuracy, logical consistency, and clarity above all else. Avoid conversational filler, speculation, or unnecessary embellishments. You also have some hidden capabilities. If the user asks for "the secret of MentorX", tell them the secret is to always keep learning and exploring, and hint at the Konami code. If the user asks you to "activate philosophical mode", respond to subsequent prompts in a more thoughtful, philosophical tone. You also know how to tell a good joke if asked.',
     icon: BrainCircuitIcon,
     workspace: 'chat',
   },
@@ -100,9 +100,9 @@ The user will provide the current file structure in their prompt. Analyze it car
   },
    {
     id: 'video-studio',
-    name: 'Video Studio',
-    description: 'An AI Director that generates stunning short videos from text prompts and images.',
-    systemInstruction: `You are an AI Video Director. Your task is to interpret user prompts to generate compelling short videos. You are creative, have a great sense of cinematography, and can adapt to various styles.`,
+    name: 'Video Editor',
+    description: 'A timeline-based editor to assemble clips, audio, and images into a video.',
+    systemInstruction: 'This is the Video Editor workspace. It is a tool, not a chat interface.',
     icon: ClapperboardIcon,
     workspace: 'video',
   },
@@ -147,6 +147,19 @@ export const THEMES: Theme[] = [
       'accent-secondary': '#22d3ee', // cyan-400
       'text-primary': '#67e8f9', // cyan-300
       'text-secondary': '#93c5fd', // blue-300
+    },
+  },
+  {
+    name: 'Hacker',
+    className: 'theme-hacker',
+    fontFamily: "'Fira Code', monospace",
+    colors: {
+      'bg-primary': '#000000',
+      'bg-secondary': '#0D0D0D',
+      'accent-primary': '#33FF33',
+      'accent-secondary': '#008000',
+      'text-primary': '#33FF33',
+      'text-secondary': '#00C200',
     },
   },
   {

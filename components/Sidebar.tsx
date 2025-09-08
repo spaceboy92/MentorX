@@ -18,7 +18,6 @@ const Sidebar: React.FC = () => {
     currentUser,
     toggleCommandPalette,
     customPersonas,
-    openPersonaModal,
     deleteCustomPersona,
     uiDensity,
   } = useAppContext();
@@ -34,32 +33,54 @@ const Sidebar: React.FC = () => {
       'compact': 'py-1.5'
   };
 
-  // FIX: Changed session type to Omit<Session, 'messages'> to match the type of the session object being passed.
   const handleSessionClick = (session: Omit<Session, 'messages'>) => {
-    const persona = personas.find(p => p.id === session.personaId);
     selectSession(session.id);
-     if (persona?.workspace === 'chat') {
-      navigate(`/chat/${persona.id}`);
-    } else if (persona?.workspace === 'code') {
-      navigate('/code-sandbox');
-    } else if (persona?.workspace === 'widget') {
-      navigate('/widget-factory');
-    } else if (persona?.workspace === 'content') {
-        navigate('/content-lab');
-    } else if (persona?.workspace === 'video') {
-        navigate('/video-studio');
-    } else {
-        navigate('/'); // Fallback to dashboard if workspace not found
+  }
+
+  // Effect to handle navigation when active session changes
+  useEffect(() => {
+    if (activeSessionId === null) {
+      // Don't force navigation if on a non-session page like the video studio
+      if (window.location.hash.endsWith('/') || window.location.hash === '#') {
+         // Already on dashboard
+      } else if (!window.location.hash.includes('/')) {
+        // Also dashboard
+      }
+      else {
+          const isNonChatPage = ['/code-sandbox', '/widget-factory', '/content-lab', '/video-studio'].some(path => window.location.hash.endsWith(path));
+          if (!isNonChatPage) {
+            navigate('/');
+          }
+      }
+      return;
     }
-    if (window.innerWidth < 768) { // Close sidebar on mobile after selection
+
+    const session = sessions.find(s => s.id === activeSessionId);
+    if (!session) return;
+    
+    const persona = personas.find(p => p.id === session.personaId);
+    if (!persona) return;
+
+    let path = '/';
+    switch (persona.workspace) {
+      case 'chat': path = `/chat/${persona.id}`; break;
+      case 'code': path = '/code-sandbox'; break;
+      case 'widget': path = '/widget-factory'; break;
+      case 'content': path = '/content-lab'; break;
+      case 'video': path = '/video-studio'; break;
+    }
+    navigate(path);
+    
+    if (window.innerWidth < 1024 && isLeftSidebarOpen) { // Close sidebar on mobile/tablet after selection
       toggleLeftSidebar();
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId, navigate]);
   
   const handleNewChat = () => {
     selectSession(null);
-    navigate('/');
-    if (window.innerWidth < 768) {
+    navigate('/'); // FIX: Explicitly navigate to dashboard to exit any workspace
+    if (window.innerWidth < 1024) { // Close sidebar on mobile/tablet
         toggleLeftSidebar();
     }
   }
@@ -95,29 +116,13 @@ const Sidebar: React.FC = () => {
     session.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleDeletePersona = (e: React.MouseEvent, persona: Persona) => {
-    e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete the "${persona.name}" persona? This cannot be undone.`)) {
-        deleteCustomPersona(persona.id);
-    }
-  };
-  
-  useEffect(() => {
-    if (activeSessionId === null && sessions.length === 0) {
-        navigate('/');
-    } else if (activeSessionId && !sessions.find(s => s.id === activeSessionId)) {
-        navigate('/');
-    }
-  }, [activeSessionId, sessions, navigate]);
-
   return (
     <aside 
       className={`
         bg-panel border-r border-white/10 shadow-2xl flex flex-col h-full w-full
-        md:fixed md:top-0 md:left-0 md:h-full md:z-30 md:transition-transform md:duration-300 md:ease-in-out md:w-64 
-        ${isLeftSidebarOpen ? 'md:translate-x-0' : 'md:-translate-x-full'}
-        
-        lg:relative lg:translate-x-0 lg:w-full
+        fixed top-0 left-0 h-full z-30 w-[85%] max-w-xs transition-transform duration-300 ease-in-out
+        ${isLeftSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        lg:relative lg:translate-x-0 lg:w-full lg:max-w-none
       `}
     >
       <div className="flex flex-col h-full">
@@ -126,7 +131,7 @@ const Sidebar: React.FC = () => {
             <MentorXLogoIcon className="w-8 h-8" />
             <h1 className="text-xl font-bold text-white">MentorX</h1>
           </div>
-          <button onClick={toggleLeftSidebar} className="p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 md:hidden">
+          <button onClick={toggleLeftSidebar} className="p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 lg:hidden">
             <XIcon className="w-6 h-6" />
           </button>
         </div>

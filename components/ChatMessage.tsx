@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -160,4 +160,4 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading = false })
   );
 };
 
-export default ChatMessage;
+export default memo(ChatMessage);

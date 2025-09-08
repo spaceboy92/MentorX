@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useMemo, useEffect, useCallback } from 'react';
-import type { AppContextType, Theme, Session, Message, User, Widget, Persona, ImageRecord, CustomBackground, VideoRecord } from '../types';
+import type { AppContextType, Theme, Session, Message, User, Widget, Persona, ImageRecord, CustomBackground } from '../types';
 import { THEMES } from '../constants';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -42,7 +42,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [pinnedWidgets, setPinnedWidgets] = useState<Widget[]>(() => getInitialState('mentorx-pinned-widgets', []));
   const [customPersonas, setCustomPersonas] = useState<Persona[]>(() => getInitialState('mentorx-custom-personas', []));
   const [generatedImages, setGeneratedImages] = useState<ImageRecord[]>(() => getInitialState('mentorx-generated-images', []));
-  const [generatedVideos, setGeneratedVideos] = useState<VideoRecord[]>(() => getInitialState('mentorx-generated-videos', []));
+  const [notes, setNotes] = useState<string>(() => getInitialState('mentorx-notes', ''));
 
 
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
@@ -108,7 +108,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem('mentorx-pinned-widgets', JSON.stringify(pinnedWidgets)); }, [pinnedWidgets]);
   useEffect(() => { localStorage.setItem('mentorx-custom-personas', JSON.stringify(customPersonas)); }, [customPersonas]);
   useEffect(() => { localStorage.setItem('mentorx-generated-images', JSON.stringify(generatedImages)); }, [generatedImages]);
-  useEffect(() => { localStorage.setItem('mentorx-generated-videos', JSON.stringify(generatedVideos)); }, [generatedVideos]);
+  useEffect(() => { localStorage.setItem('mentorx-notes', notes); }, [notes]);
   useEffect(() => { localStorage.setItem('mentorx-theme', JSON.stringify(theme)); }, [theme]);
   useEffect(() => { localStorage.setItem('mentorx-custom-bg', JSON.stringify(customBackground)); }, [customBackground]);
   useEffect(() => { localStorage.setItem('mentorx-ui-density', JSON.stringify(uiDensity)); }, [uiDensity]);
@@ -175,6 +175,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { messages, ...metadata } = newSession;
     setSessions(prev => [metadata, ...prev]);
     setActiveSessionId(newSession.id);
+    return newSession.id;
   }, []);
   
   const updateMessagesForActiveSession = useCallback((messages: Message[]) => {
@@ -186,29 +187,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('mentorx-sessions', JSON.stringify(updatedSessions));
   }, [activeSessionId]);
   
-  // FIX: Refactored deleteSession to use the `sessions` state, removing the problematic line that caused a type error.
+  // FIX: This function was rewritten to correct a typing error when reading sessions from localStorage
+  // and to ensure it returns the { nextSessionId: string | null } object as required by its type definition.
   const deleteSession = useCallback((sessionId: string) => {
-    const sessionIndex = sessions.findIndex(s => s.id === sessionId);
-    if (sessionIndex === -1) return;
-
     const allSessions = getInitialState<Session[]>('mentorx-sessions', []);
+    const sessionIndex = allSessions.findIndex(s => s.id === sessionId);
+
+    if (sessionIndex === -1) {
+      return { nextSessionId: activeSessionId };
+    }
+
+    // Update localStorage by filtering the full sessions
     const updatedSessionsForStorage = allSessions.filter(s => s.id !== sessionId);
     localStorage.setItem('mentorx-sessions', JSON.stringify(updatedSessionsForStorage));
 
-    const updatedSessionMetadatas = sessions.filter(s => s.id !== sessionId);
+    // Update state with the metadatas from the updated sessions
+    const updatedSessionMetadatas = updatedSessionsForStorage.map(({ messages, ...rest }) => rest);
+    setSessions(updatedSessionMetadatas);
 
+    let nextSessionId: string | null = activeSessionId;
+
+    // If the active session was deleted, select the next logical one
     if (activeSessionId === sessionId) {
-      let nextActiveSessionId: string | null = null;
       if (updatedSessionMetadatas.length > 0) {
-        const newIndex = Math.min(sessionIndex, updatedSessionMetadatas.length - 1);
-        nextActiveSessionId = updatedSessionMetadatas[newIndex].id;
+        // Select the previous session, or the first one if the deleted one was the first
+        const newIndex = Math.max(0, sessionIndex - 1);
+        nextSessionId = updatedSessionMetadatas[newIndex].id;
+        setActiveSessionId(nextSessionId);
+      } else {
+        // No sessions left
+        nextSessionId = null;
+        setActiveSessionId(null);
       }
-      setSessions(updatedSessionMetadatas);
-      setActiveSessionId(nextActiveSessionId);
-    } else {
-      setSessions(updatedSessionMetadatas);
     }
-  }, [activeSessionId, sessions]);
+    return { nextSessionId };
+  }, [activeSessionId]);
+
   
   const renameSession = useCallback((sessionId: string, newName: string) => {
     setSessions(prev => prev.map(session => 
@@ -286,15 +300,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGeneratedImages(prev => [newImage, ...prev]);
   }
 
-  const addGeneratedVideo = (video: Omit<VideoRecord, 'id' | 'timestamp'>) => {
-    const newVideo: VideoRecord = {
-      ...video,
-      id: `vid-${Date.now()}`,
-      timestamp: Date.now(),
-    };
-    setGeneratedVideos(prev => [newVideo, ...prev]);
-  }
-
   const openImagePreview = (image: ImageRecord) => {
     setPreviewingImage(image);
     setIsImagePreviewOpen(true);
@@ -321,6 +326,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isLeftSidebarOpen, toggleLeftSidebar,
     isRightSidebarOpen, toggleRightSidebar,
     isFocusMode, setFocusMode,
+    notes, setNotes,
     sessions, activeSessionId, selectSession, createNewSession, updateMessagesForActiveSession, deleteSession, renameSession,
     isSettingsOpen, toggleSettings,
     currentUser, signIn, signOut,
@@ -330,7 +336,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customPersonas, addCustomPersona, updateCustomPersona, deleteCustomPersona,
     isPersonaModalOpen, openPersonaModal, closePersonaModal, editingPersona,
     generatedImages, addGeneratedImage,
-    generatedVideos, addGeneratedVideo,
     consumeToken, isOutOfTokens, secondsUntilTokenRegen,
     isImagePreviewOpen, previewingImage, openImagePreview, closeImagePreview,
     isBrowserOpen, browserUrl, openBrowser, closeBrowser,
@@ -339,7 +344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     panelOpacity, setPanelOpacity,
     leftSidebarWidth, setLeftSidebarWidth,
     rightSidebarWidth, setRightSidebarWidth,
-  }), [theme, isLeftSidebarOpen, isRightSidebarOpen, isFocusMode, sessions, activeSessionId, isSettingsOpen, currentUser, pinnedWidgets, selectSession, createNewSession, updateMessagesForActiveSession, deleteSession, renameSession, isCommandPaletteOpen, hasBeenOnboarded, customPersonas, isPersonaModalOpen, editingPersona, generatedImages, generatedVideos, isOutOfTokens, secondsUntilTokenRegen, previewingImage, isImagePreviewOpen, isBrowserOpen, browserUrl, customBackground, uiDensity, panelOpacity, leftSidebarWidth, rightSidebarWidth]);
+  }), [theme, isLeftSidebarOpen, isRightSidebarOpen, isFocusMode, notes, sessions, activeSessionId, isSettingsOpen, currentUser, pinnedWidgets, selectSession, createNewSession, updateMessagesForActiveSession, deleteSession, renameSession, isCommandPaletteOpen, hasBeenOnboarded, customPersonas, isPersonaModalOpen, editingPersona, generatedImages, isOutOfTokens, secondsUntilTokenRegen, previewingImage, isImagePreviewOpen, isBrowserOpen, browserUrl, customBackground, uiDensity, panelOpacity, leftSidebarWidth, rightSidebarWidth, setNotes]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
