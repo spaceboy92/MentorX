@@ -52,13 +52,15 @@ const LoadingButton: React.FC<{ onStop?: () => void }> = ({ onStop }) => (
                 />
             </circle>
         </svg>
-        <button
-            onClick={onStop}
-            className="absolute inset-0 flex items-center justify-center text-white/80 hover:text-white"
-            aria-label="Stop generating"
-        >
-            <StopCircleIcon className="w-5 h-5" />
-        </button>
+        {onStop && (
+            <button
+                onClick={onStop}
+                className="absolute inset-0 flex items-center justify-center text-white/80 hover:text-white"
+                aria-label="Stop generating"
+            >
+                <StopCircleIcon className="w-5 h-5" />
+            </button>
+        )}
     </div>
 );
 
@@ -117,7 +119,6 @@ const PromptInput = forwardRef<PromptInputRef, PromptInputProps>(({ prompt, onPr
         setImageFile({ data: base64String, type: file.type });
         setImagePreview(reader.result as string);
       };
-      // FIX: Corrected typo from readDataURL to readAsDataURL.
       reader.readAsDataURL(file);
     }
   };
@@ -137,66 +138,68 @@ const PromptInput = forwardRef<PromptInputRef, PromptInputProps>(({ prompt, onPr
   const isDisabled = isLoading || disabled;
 
   return (
-    <div className="p-4 bg-[var(--bg-secondary)]/50 border-t border-white/10">
-      <div className={`relative bg-[var(--bg-primary)] border border-white/10 rounded-xl shadow-lg ${isDisabled ? 'opacity-70' : ''}`}>
-        {imagePreview && (
-          <div className="p-2 relative">
-            <img src={imagePreview} alt="preview" className="h-20 w-auto rounded-md" />
-            <button
-              onClick={() => {
-                setImagePreview(null);
-                setImageFile(null);
-                if(fileInputRef.current) fileInputRef.current.value = "";
-              }}
-              className="absolute top-0 right-0 m-1 p-1 bg-black/50 rounded-full hover:bg-black/80"
-            >
-              <XIcon className="w-4 h-4 text-white" />
-            </button>
-          </div>
-        )}
-        <textarea
-          ref={textareaRef}
-          value={prompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={disabled ? disabledText : "Ask MentorX anything..."}
-          className="w-full bg-transparent p-4 pr-32 text-[var(--text-primary)] placeholder-gray-500 resize-none focus:outline-none max-h-48"
-          rows={1}
-          disabled={isDisabled}
-        />
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          {/* This button is now hidden and triggered programmatically */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+    <div className="p-4 bg-panel-no-blur border-t border-[var(--panel-border-color)]">
+      <div className={`rgb-border-glow rounded-xl ${isDisabled ? 'opacity-70' : ''}`}>
+        <div className="relative bg-[var(--bg-primary)] border border-white/10 rounded-lg shadow-lg">
+          {imagePreview && (
+            <div className="p-2 relative">
+              <img src={imagePreview} alt="preview" className="h-20 w-auto rounded-md" />
+              <button
+                onClick={() => {
+                  setImagePreview(null);
+                  setImageFile(null);
+                  if(fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="absolute top-0 right-0 m-1 p-1 bg-black/50 rounded-full hover:bg-black/80"
+              >
+                <XIcon className="w-4 h-4 text-white" />
+              </button>
+            </div>
+          )}
+          <textarea
+            ref={textareaRef}
+            value={prompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={disabled ? disabledText : "Ask MentorX anything..."}
+            className="w-full bg-transparent p-4 pr-32 text-[var(--text-primary)] placeholder-gray-500 resize-none focus:outline-none max-h-48"
+            rows={1}
             disabled={isDisabled}
-            style={{ display: 'none'}}
-            aria-hidden="true"
-          >
-            <PaperclipIcon className="w-5 h-5" />
-          </button>
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-          {browserSupportsSpeechRecognition && (
+          />
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            {/* This button is now hidden and triggered programmatically */}
             <button
-              onClick={toggleListen}
-              className={`p-2 transition-colors disabled:opacity-50 ${listening ? 'text-red-500' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
               disabled={isDisabled}
+              style={{ display: 'none'}}
+              aria-hidden="true"
             >
-              <MicIcon className="w-5 h-5" />
+              <PaperclipIcon className="w-5 h-5" />
             </button>
-          )}
-          {isLoading ? (
-             <LoadingButton onStop={onStop} />
-          ) : (
-            <button
-                onClick={handleSend}
-                className="p-2 rounded-full bg-[var(--accent-primary)] text-white hover:opacity-90 transition-all disabled:bg-gray-600 disabled:cursor-not-allowed"
-                disabled={(!prompt.trim() && !imageFile) || isDisabled}
-                aria-label="Send message"
-            >
-                <SendIcon className="w-5 h-5" />
-            </button>
-          )}
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+            {browserSupportsSpeechRecognition && (
+              <button
+                onClick={toggleListen}
+                className={`p-2 transition-colors disabled:opacity-50 ${listening ? 'text-red-500' : 'text-gray-400 hover:text-white'}`}
+                disabled={isDisabled}
+              >
+                <MicIcon className="w-5 h-5" />
+              </button>
+            )}
+            {isLoading ? (
+               <LoadingButton onStop={onStop} />
+            ) : (
+              <button
+                  onClick={handleSend}
+                  className="p-2 rounded-full bg-[var(--accent-primary)] text-white hover:opacity-90 transition-all disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  disabled={(!prompt.trim() && !imageFile) || isDisabled}
+                  aria-label="Send message"
+              >
+                  <SendIcon className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

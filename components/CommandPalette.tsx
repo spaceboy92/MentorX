@@ -1,5 +1,8 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+// FIX: Using namespace import for react-router-dom to resolve module export errors.
+import * as ReactRouterDom from 'react-router-dom';
+const { useNavigate } = ReactRouterDom;
 import { useAppContext } from '../contexts/AppContext';
 // FIX: Replaced non-existent PERSONAS import with getPersonas to include custom personas.
 import { getPersonas } from '../constants';
@@ -19,7 +22,6 @@ const CommandPalette: React.FC = () => {
     toggleCommandPalette,
     toggleSettings,
     toggleLeftSidebar,
-    toggleRightSidebar,
     createNewSession,
     customPersonas, // FIX: Added customPersonas to context destructuring.
     openPersonaModal, // FIX: Added openPersonaModal for handling 'Create New' action.
@@ -39,29 +41,21 @@ const CommandPalette: React.FC = () => {
   const commands: Command[] = [
     ...personas.map(p => ({
         id: `persona-${p.id}`,
-        title: p.id === 'custom-persona' ? p.name : `Start chat: ${p.name}`,
+        title: p.id === 'custom-persona' ? p.name : `Start session: ${p.name}`,
         icon: <p.icon className="w-5 h-5 text-[var(--accent-primary)]"/>,
-        section: 'Personas',
+        section: 'Workspaces',
         action: () => {
             if (p.id === 'custom-persona') {
                 openPersonaModal();
                 return;
             }
-            createNewSession(p.id);
-            if (p.workspace === 'chat') {
-                navigate(`/chat/${p.id}`);
-            } else if (p.workspace === 'code') {
-                navigate('/code-sandbox');
-            } else if (p.workspace === 'widget') {
-                navigate('/widget-factory');
-            } else if (p.workspace === 'content') {
-                navigate('/content-lab');
-            }
+            const newSessionId = createNewSession(p.id);
+            // Navigation is now handled by a useEffect in Sidebar, which is more robust.
+            // This ensures the view switches correctly after the session is created.
         }
     })),
     { id: 'settings', title: 'Open Settings', icon: <SettingsIcon className="w-5 h-5"/>, section: 'General', action: toggleSettings },
-    { id: 'toggle-left', title: 'Toggle Left Sidebar', icon: <PanelRightOpenIcon className="w-5 h-5 transform rotate-180"/>, section: 'General', action: toggleLeftSidebar },
-    { id: 'toggle-right', title: 'Toggle Right Sidebar', icon: <PanelRightOpenIcon className="w-5 h-5"/>, section: 'General', action: toggleRightSidebar },
+    { id: 'toggle-left', title: 'Toggle Sidebar', icon: <PanelRightOpenIcon className="w-5 h-5 transform rotate-180"/>, section: 'General', action: toggleLeftSidebar },
   ];
   
   const filteredCommands = commands.filter(cmd => 
@@ -97,7 +91,7 @@ const CommandPalette: React.FC = () => {
     } else if (e.key === 'Escape') {
       toggleCommandPalette();
     }
-  }, [isCommandPaletteOpen, selectedIndex, filteredCommands, handleAction]);
+  }, [isCommandPaletteOpen, selectedIndex, filteredCommands, handleAction, toggleCommandPalette]);
   
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);

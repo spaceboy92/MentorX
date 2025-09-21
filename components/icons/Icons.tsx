@@ -4,27 +4,21 @@ export const MentorXLogoIcon: React.FC<{ className?: string }> = ({ className })
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className={className}>
     <defs>
       <linearGradient id="logo-gradient" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="var(--accent-secondary)" />
-        <stop offset="100%" stopColor="var(--accent-primary)" />
+        <stop offset="0%" stopColor="#38bdf8" /> {/* A bright sky blue */}
+        <stop offset="100%" stopColor="#818cf8" /> {/* A soft indigo */}
       </linearGradient>
     </defs>
-    {/* A stylized 'M' with a cross-over forming an 'X', and a spark at the center representing the "spark of mentorship/insight" */}
+    {/* A stylized 'M' and 'X' combined, inspired by the provided logo */}
     <path 
       stroke="url(#logo-gradient)" 
-      strokeWidth="1.5" 
+      strokeWidth="2" 
       strokeLinecap="round" 
       strokeLinejoin="round" 
-      d="M4 21V3l8 8 8-8v18" 
-    />
-    <path 
-      stroke="url(#logo-gradient)" 
-      strokeWidth="1.5" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      d="M12 8v6M9 11h6" 
+      d="M4 20V4l8 8L4 20zm16 0V4l-8 8L20 4z"
     />
   </svg>
 );
+
 
 export const BrainCircuitIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -44,6 +38,15 @@ export const CodeIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 export const LayoutTemplateIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="7" x="3" y="3" rx="1" /><rect width="9" height="7" x="3" y="14" rx="1" /><rect width="5" height="7" x="16" y="14" rx="1" /></svg>
+);
+
+export const FileCodeIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+      <path d="m10 16 2-2-2-2" />
+      <path d="m6 16 2-2-2-2" />
+    </svg>
 );
 
 export const WandSparklesIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -207,6 +210,11 @@ export const RotateCcwIcon: React.FC<{ className?: string }> = ({ className }) =
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
 );
 
+export const RotateCwIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+);
+
+
 export const CpuIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="16" height="16" x="4" y="4" rx="2" /><rect width="6" height="6" x="9" y="9" rx="1" /><path d="M15 2v2" /><path d="M15 20v2" /><path d="M2 15h2" /><path d="M2 9h2" /><path d="M20 15h2" /><path d="M20 9h2" /><path d="M9 2v2" /><path d="M9 20v2" /></svg>
 );
@@ -280,4 +288,10 @@ export const TextIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 export const MoveIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="5 9 2 12 5 15"></polyline><polyline points="9 5 12 2 15 5"></polyline><polyline points="15 19 12 22 9 19"></polyline><polyline points="19 9 22 12 19 15"></polyline><line x1="2" y1="12" x2="22" y2="12"></line><line x1="12" y1="2" x2="12" y2="22"></line></svg>
+);
+
+export const GoogleIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#4285F4" d="M43.611 20.083H24v8.017h11.002c-1.163 5.394-6.331 9.349-11.002 9.349-8.528 0-15.441-6.912-15.441-15.441s6.913-15.441 15.441-15.441c4.891 0 9.077 2.228 11.666 5.484l-6.423 6.423c-.947-.947-2.383-1.623-4.243-1.623-3.821 0-6.913 3.092-6.913 6.913s3.092 6.913 6.913 6.913c4.533 0 6.136-3.155 6.423-4.66h-6.423v-8.017z"/>
+  </svg>
 );

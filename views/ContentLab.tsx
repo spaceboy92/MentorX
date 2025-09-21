@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { BookTextIcon, CopyIcon, CheckIcon } from '../components/icons/Icons';
+import { BookTextIcon, CopyIcon, CheckIcon, MenuIcon } from '../components/icons/Icons';
 import { useAppContext } from '../contexts/AppContext';
 
 type Action = 'summarize' | 'rewrite' | 'professional' | 'casual';
@@ -11,7 +11,13 @@ const ContentLab: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [activeAction, setActiveAction] = useState<Action>('summarize');
     const [copied, setCopied] = useState(false);
-    const { theme } = useAppContext();
+    const { toggleLeftSidebar, setGlobalLoading } = useAppContext();
+    
+    useEffect(() => {
+        setGlobalLoading(false);
+        return () => setGlobalLoading(false);
+    }, [setGlobalLoading]);
+
 
     const handleAction = async (action: Action) => {
         if (!inputText || isLoading) return;
@@ -69,22 +75,28 @@ const ContentLab: React.FC = () => {
         <div className="flex flex-col h-full bg-[var(--bg-primary)]">
             <header className="flex items-center justify-between p-3 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-3">
+                    <button onClick={toggleLeftSidebar} className="p-2 rounded-full hover:bg-white/10 lg:hidden">
+                        <MenuIcon className="w-6 h-6" />
+                    </button>
                     <BookTextIcon className="w-8 h-8 text-[var(--accent-primary)]" />
                     <div>
                         <h1 className="text-lg font-semibold text-white">Content Lab</h1>
-                        <p className="text-xs text-[var(--text-secondary)]">Summarize, rewrite, or change the tone of your text.</p>
+                        <p className="text-xs text-[var(--text-secondary)]">An expert editor for summarizing, rewriting, or changing the tone of your text.</p>
                     </div>
                 </div>
+                 <div></div>
             </header>
             <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
                 {/* Input Panel */}
                 <div className="flex flex-col bg-[var(--bg-secondary)]/50 rounded-lg border border-white/10">
-                    <textarea
-                        value={inputText}
-                        onChange={(e) => setInputText(e.target.value)}
-                        placeholder="Paste your text here..."
-                        className="w-full h-full bg-transparent p-4 text-[var(--text-primary)] placeholder-gray-500 resize-none focus:outline-none flex-1"
-                    />
+                    <div className="flex-1 relative rgb-border-glow rounded-t-lg">
+                        <textarea
+                            value={inputText}
+                            onChange={(e) => setInputText(e.target.value)}
+                            placeholder="Paste your text here..."
+                            className="w-full h-full bg-transparent p-4 text-[var(--text-primary)] placeholder-gray-500 resize-none focus:outline-none"
+                        />
+                    </div>
                     <div className="p-2 border-t border-white/10 flex flex-wrap gap-2 justify-center">
                         <ActionButton action="summarize" label="Summarize" />
                         <ActionButton action="rewrite" label="Rewrite" />

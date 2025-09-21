@@ -39,14 +39,32 @@
     --text-secondary: #a5b4fc;
     --font-family: 'Lexend', sans-serif;
     --panel-opacity: 1;
+    --panel-blur: 0px;
+    --panel-border-color: hsla(0, 0%, 100%, 0.1);
   }
   body {
     font-family: var(--font-family);
+    background-color: var(--bg-primary); /* Fallback */
   }
   .bg-panel {
     background-color: hsla(
       from var(--bg-secondary) h s l / var(--panel-opacity)
     );
+    border: 1px solid var(--panel-border-color);
+    backdrop-filter: blur(var(--panel-blur));
+    position: relative;
+    z-index: 1;
+  }
+  .glass-effect .bg-panel {
+      --panel-opacity: 0.6;
+      --panel-blur: 12px;
+      --panel-border-color: hsla(0, 0%, 100%, 0.15);
+  }
+  .bg-panel-no-blur {
+      background-color: hsla(
+        from var(--bg-secondary) h s l / 0.9
+      );
+      border: 1px solid var(--panel-border-color);
   }
 
   @keyframes blink {
@@ -67,6 +85,71 @@
   }
   .animate-barrel-roll {
     animation: barrel-roll 1s ease-in-out;
+  }
+  
+  /* Lite Mode Optimizations */
+  .lite-mode *,
+  .lite-mode *::before,
+  .lite-mode *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+  .lite-mode .bg-panel {
+    --panel-opacity: 1 !important;
+    --panel-blur: 0px !important;
+    backdrop-filter: none !important;
+  }
+  .lite-mode .bg-panel::after {
+    display: none !important;
+  }
+  
+  /* RGB Border Animation */
+  @keyframes rgb-glow {
+    0% {
+      --angle: 0deg;
+    }
+    100% {
+      --angle: 360deg;
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.7; filter: blur(4px); }
+    50% { opacity: 1; filter: blur(6px); }
+  }
+  
+  /* Always-on Input Glow */
+  .rgb-border-glow {
+    --angle: 0deg;
+    position: relative;
+    /* Default to pill shape, components can override with rounded-lg etc. */
+    border-radius: 9999px;
+  }
+  .rgb-border-glow::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: conic-gradient(
+      from var(--angle),
+      #ff0000, #ff00ff, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000
+    );
+    animation: rgb-glow 1.5s linear infinite, pulse-glow 2.5s ease-in-out infinite;
+    z-index: -1;
+  }
+  
+  .lite-mode .rgb-border-glow::before {
+    display: none;
+  }
+  
+  /* Mascot Animation */
+  @keyframes character-bounce {
+      0%, 100% { transform: translateY(0) scale(1.1) rotate(-3deg); }
+      50% { transform: translateY(-10px) scale(1.1) rotate(3deg); }
+  }
+  .group:hover .character-image {
+      animation: character-bounce 0.8s ease-in-out;
   }
 </style>
 </head>

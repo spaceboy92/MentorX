@@ -1,28 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { THEMES, FONTS } from '../constants';
-import { XIcon, PaletteIcon, UserCircleIcon } from './icons/Icons';
+import { XIcon, PaletteIcon, UserCircleIcon, ZapIcon, SparklesIcon, BrainCircuitIcon, Trash2Icon } from './icons/Icons';
 import type { Theme } from '../types';
-
-const ColorInput: React.FC<{ label: string; value: string; onChange: (value: string) => void }> = ({ label, value, onChange }) => (
-  <div className="flex items-center justify-between">
-    <label className="text-sm text-[var(--text-secondary)] capitalize">{label}</label>
-    <div className="flex items-center gap-2 border border-white/10 rounded-md px-2 bg-black/20">
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-6 h-6 p-0 bg-transparent border-none cursor-pointer"
-        />
-        <input 
-          type="text" 
-          value={value} 
-          onChange={(e) => onChange(e.target.value)} 
-          className="font-mono text-sm bg-transparent w-20 focus:outline-none text-right"
-        />
-    </div>
-  </div>
-);
+import ToggleSwitch from './ui/ToggleSwitch';
 
 const TabButton: React.FC<{ Icon: React.ComponentType<{ className?: string }>; label: string; isActive: boolean; onClick: () => void }> = ({ Icon, label, isActive, onClick }) => (
   <button
@@ -43,54 +24,22 @@ const SettingsModal: React.FC = () => {
   const { 
     isSettingsOpen, toggleSettings, 
     theme, setTheme, 
-    currentUser, signIn, signOut,
+    currentUser, signOut,
+    isGuest,
     customBackground, setCustomBackground,
     uiDensity, setUiDensity,
-    panelOpacity, setPanelOpacity
+    panelOpacity, setPanelOpacity,
+    isLiteMode, setLiteMode,
+    isGlassmorphism, setGlassmorphism,
+    isMemoryEnabled, setMemoryEnabled,
+    userMemories, updateUserMemory, deleteUserMemory,
   } = useAppContext();
   
   const [activeTab, setActiveTab] = useState('appearance');
-  const [customThemeColors, setCustomThemeColors] = useState(theme.colors);
-  const googleButtonRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setCustomThemeColors(theme.colors);
-  }, [theme.colors]);
-
-  const handleCredentialResponse = (response: any) => {
-    signIn(response.credential);
-  };
-  
-  useEffect(() => {
-      if (isSettingsOpen && activeTab === 'account' && !currentUser && googleButtonRef.current) {
-        if (window.google?.accounts?.id) {
-            window.google.accounts.id.initialize({
-                client_id: "1066611314162-24u458sk552lj3n4pq26ie43a857bfba.apps.googleusercontent.com",
-                callback: handleCredentialResponse,
-            });
-            window.google.accounts.id.renderButton(
-                googleButtonRef.current,
-                { theme: "outline", size: "large", type: "standard", text: "signin_with" }
-            );
-        }
-      }
-  }, [isSettingsOpen, activeTab, currentUser, signIn]);
+  const [editingMemory, setEditingMemory] = useState<{id: string, value: string} | null>(null);
 
   if (!isSettingsOpen) return null;
-
-  const handleColorChange = (key: string, value: string) => {
-    setCustomThemeColors(prev => ({ ...prev, [key]: value }));
-  };
-  
-  const applyCustomTheme = () => {
-      setTheme({
-          ...theme,
-          name: 'Custom',
-          className: 'theme-custom',
-          colors: customThemeColors
-      });
-  }
 
   const handleFontChange = (fontFamily: string) => {
       setTheme({ ...theme, fontFamily });
@@ -136,6 +85,7 @@ const SettingsModal: React.FC = () => {
             <h2 className="text-lg font-semibold mb-4 px-2 hidden md:block">Settings</h2>
             <div className='flex gap-1 overflow-x-auto md:flex-col md:space-y-1'>
                 <TabButton Icon={PaletteIcon} label="Appearance" isActive={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} />
+                <TabButton Icon={BrainCircuitIcon} label="Personalization" isActive={activeTab === 'personalization'} onClick={() => setActiveTab('personalization')} />
                 <TabButton Icon={UserCircleIcon} label="Account" isActive={activeTab === 'account'} onClick={() => setActiveTab('account')} />
             </div>
         </div>
@@ -143,7 +93,7 @@ const SettingsModal: React.FC = () => {
         <div className="flex-1 flex flex-col">
             <header className="flex items-center justify-between p-2 shrink-0 md:justify-end">
               <h2 className="text-lg font-semibold px-2 md:hidden">
-                {activeTab === 'appearance' ? 'Appearance' : 'Account'}
+                {activeTab === 'appearance' ? 'Appearance' : activeTab === 'personalization' ? 'Personalization' : 'Account'}
               </h2>
               <button onClick={toggleSettings} className="p-2 rounded-full hover:bg-white/10">
                 <XIcon className="w-5 h-5" />
@@ -155,9 +105,38 @@ const SettingsModal: React.FC = () => {
                   <div className="space-y-8">
                     <h3 className="text-xl font-semibold text-white hidden md:block">Appearance</h3>
                     
+                     {/* Performance & Visuals */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-3 p-4 rounded-lg bg-black/20 border border-white/10">
+                            <div className="flex items-center gap-2">
+                                <ZapIcon className="w-5 h-5 text-[var(--accent-primary)]"/>
+                                <h4 className="font-semibold text-[var(--text-secondary)]">Performance</h4>
+                            </div>
+                            <ToggleSwitch
+                                label="Lite Mode"
+                                checked={isLiteMode}
+                                onChange={setLiteMode}
+                            />
+                            <p className="text-xs text-gray-500 pl-12 -mt-2">Reduces animations and effects to improve performance on older devices.</p>
+                        </div>
+                        <div className={`space-y-3 p-4 rounded-lg bg-black/20 border border-white/10 ${isLiteMode ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <div className="flex items-center gap-2">
+                                <SparklesIcon className="w-5 h-5 text-[var(--accent-primary)]"/>
+                                <h4 className="font-semibold text-[var(--text-secondary)]">Visuals</h4>
+                            </div>
+                            <ToggleSwitch
+                                label="Glassmorphism"
+                                checked={isGlassmorphism}
+                                onChange={setGlassmorphism}
+                            />
+                             <p className="text-xs text-gray-500 pl-12 -mt-2">Enables a frosted glass effect on UI panels. {isLiteMode && "(Disabled in Lite Mode)"}</p>
+                        </div>
+                    </div>
+
+
                     {/* Background Settings */}
-                    <div className="space-y-3">
-                        <h4 className="font-semibold text-[var(--text-secondary)]">Custom Background</h4>
+                    <div className={`space-y-3 ${isLiteMode ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <h4 className="font-semibold text-[var(--text-secondary)]">Custom Background {isLiteMode && "(Disabled)"}</h4>
                         <div className="flex gap-2">
                            <input type="text" placeholder="Image URL..." value={customBackground?.url || ''} onChange={handleBgUrlChange} className="w-full bg-black/20 border border-white/10 rounded-md p-2 focus:outline-none focus:border-[var(--accent-primary)] transition-colors"/>
                            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden"/>
@@ -199,14 +178,72 @@ const SettingsModal: React.FC = () => {
                         </div>
                     </div>
                     
-                     <div className="space-y-3">
-                        <h4 className="font-semibold text-[var(--text-secondary)]">Effects</h4>
+                     <div className={`space-y-3 ${isLiteMode || !isGlassmorphism ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <h4 className="font-semibold text-[var(--text-secondary)]">Effects {(isLiteMode || !isGlassmorphism) && "(Disabled)"}</h4>
                          <label className="flex items-center gap-4 text-sm text-[var(--text-secondary)]">
                             <span>Panel Opacity</span>
                             <input type="range" min="0.5" max="1" step="0.05" value={panelOpacity} onChange={handlePanelOpacityChange} className="w-full" />
                         </label>
                     </div>
 
+                  </div>
+                )}
+                
+                {activeTab === 'personalization' && (
+                  <div>
+                      <h3 className="text-xl font-semibold mb-4 text-white hidden md:block">Personalization</h3>
+                      <div className="space-y-6">
+                          <div className={`p-4 rounded-lg bg-black/20 border border-white/10 ${isGuest ? 'opacity-50' : ''}`}>
+                              <ToggleSwitch
+                                  label="Enable Personalized Memory"
+                                  checked={isMemoryEnabled}
+                                  onChange={setMemoryEnabled}
+                                  disabled={isGuest}
+                              />
+                              <p className="text-xs text-gray-500 pl-12 -mt-2">
+                                {isGuest 
+                                    ? "Sign in to enable personalization." 
+                                    : "Allow MentorX to remember key details from your conversations to provide a more tailored experience."}
+                              </p>
+                          </div>
+
+                          <div className={`space-y-3 ${!isMemoryEnabled || isGuest ? 'opacity-50 pointer-events-none' : ''}`}>
+                              <h4 className="font-semibold text-[var(--text-secondary)]">Remembered Details</h4>
+                              {userMemories.length > 0 ? (
+                                  <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
+                                      {userMemories.map(memory => (
+                                          <div key={memory.id} className="flex items-center gap-2 p-2 bg-black/20 rounded-md">
+                                              <span className="font-semibold text-sm text-gray-400 capitalize w-1/4 truncate">{memory.key}:</span>
+                                              <input 
+                                                  type="text"
+                                                  value={editingMemory?.id === memory.id ? editingMemory.value : memory.value}
+                                                  onFocus={() => setEditingMemory({id: memory.id, value: memory.value})}
+                                                  onChange={(e) => setEditingMemory({id: memory.id, value: e.target.value})}
+                                                  onBlur={() => {
+                                                      if (editingMemory) {
+                                                          updateUserMemory({ ...memory, value: editingMemory.value });
+                                                      }
+                                                      setEditingMemory(null);
+                                                  }}
+                                                  onKeyDown={(e) => {
+                                                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                  }}
+                                                  className="flex-1 bg-transparent border-b border-dashed border-transparent focus:border-white/30 focus:outline-none text-sm"
+                                              />
+                                              <button onClick={() => deleteUserMemory(memory.id)} className="p-1 text-gray-500 hover:text-red-400 rounded-full hover:bg-white/10">
+                                                  <Trash2Icon className="w-4 h-4" />
+                                              </button>
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <div className="text-center py-8 text-gray-500 text-sm">
+                                      <p>No details remembered yet.</p>
+                                      <p>Start a conversation, and MentorX will learn as you chat!</p>
+                                  </div>
+                              )}
+                          </div>
+                      </div>
                   </div>
                 )}
 
@@ -227,9 +264,13 @@ const SettingsModal: React.FC = () => {
                                 </button>
                              </div>
                         ) : (
-                            <div className="p-8 bg-black/20 rounded-lg border border-white/10 flex flex-col items-center justify-center">
-                               <p className="text-[var(--text-secondary)] mb-4">Sign in with Google to sync your chats and settings.</p>
-                               <div ref={googleButtonRef}></div>
+                            <div className="p-8 bg-black/20 rounded-lg border border-white/10 flex flex-col items-center justify-center text-center">
+                               <UserCircleIcon className="w-16 h-16 text-gray-500 mb-2" />
+                               <h4 className="text-lg font-bold text-white">You are browsing as a Guest</h4>
+                               <p className="text-[var(--text-secondary)] mb-4 text-sm max-w-sm">Sign up or sign in to sync your chat history, create custom personas, and unlock personalization features.</p>
+                               <button onClick={signOut} className="mt-2 w-full max-w-xs bg-[var(--accent-primary)] text-white font-semibold py-2 rounded-lg hover:opacity-90 transition-opacity active:scale-95">
+                                    Sign Up / Sign In
+                                </button>
                             </div>
                         )}
                     </div>

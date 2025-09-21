@@ -41,7 +41,7 @@ const PersonaModal: React.FC = () => {
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center" onClick={closePersonaModal}>
       <div 
-        className="bg-[var(--bg-secondary)] w-full max-w-lg rounded-2xl shadow-2xl border border-white/10 flex flex-col m-4" 
+        className="bg-panel w-full max-w-lg rounded-2xl shadow-2xl border border-white/10 flex flex-col m-4" 
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between p-4 border-b border-white/10">

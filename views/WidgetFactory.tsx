@@ -1,202 +1,253 @@
-import React, { useState } from 'react';
-import { LayoutTemplateIcon, PinIcon, SparklesIcon, RotateCcwIcon } from '../components/icons/Icons';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { Resizable } from 're-resizable';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { LayoutTemplateIcon, MenuIcon, BotIcon, CopyIcon, CheckIcon, CodeIcon, BrainCircuitIcon } from '../components/icons/Icons';
 import ChatMessage from '../components/ChatMessage';
 import PromptInput from '../components/PromptInput';
-import type { Message, Widget } from '../types';
-import { GoogleGenAI, Type } from "@google/genai";
 import { useAppContext } from '../contexts/AppContext';
-import { DEFAULT_PERSONAS } from '../constants';
+import { useWindowSize } from '../hooks/useWindowSize';
+import { GoogleGenAI } from '@google/genai';
+import { getPersonas, LOADING_MESSAGES } from '../constants';
+import type { Message, Persona } from '../types';
+
+type CodeType = 'html' | 'css' | 'js';
+type WidgetCode = { html: string; css: string; js: string; };
+
+const messagesToGeminiHistory = (messages: Message[]) => {
+  return messages.map(msg => ({
+    role: msg.role,
+    parts: [{ text: msg.text }]
+  }));
+};
+
+const CodeEditor: React.FC<{ code: string, language: string, onCodeChange: (newCode: string) => void }> = memo(({ code, language, onCodeChange }) => {
+    const [copied, setCopied] = useState(false);
+    
+    const handleCopy = () => {
+        navigator.clipboard.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div className="relative h-full bg-[#1e293b]">
+             <div className="absolute top-2 right-2 z-10">
+                <button onClick={handleCopy} className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-black/20 hover:bg-black/40 text-gray-300">
+                    {copied ? <CheckIcon className="w-4 h-4 text-green-400"/> : <CopyIcon className="w-4 h-4"/>}
+                    {copied ? 'Copied' : 'Copy'}
+                </button>
+            </div>
+            <textarea
+                value={code}
+                onChange={(e) => onCodeChange(e.target.value)}
+                className="absolute inset-0 bg-transparent p-4 font-mono text-transparent caret-white resize-none w-full h-full focus:outline-none"
+                spellCheck="false"
+            />
+            <SyntaxHighlighter language={language} style={vscDarkPlus} customStyle={{ margin: 0, padding: '1rem', height: '100%', overflow: 'auto', background: 'transparent' }}>
+                {code}
+            </SyntaxHighlighter>
+        </div>
+    );
+});
+
 
 const WidgetFactory: React.FC = () => {
-  const { pinnedWidgets, pinWidget, unpinWidget } = useAppContext();
-  const [activeWidget, setActiveWidget] = useState<Widget | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [widgetVariations, setWidgetVariations] = useState<Widget[]>([]);
-  const [prompt, setPrompt] = useState('');
-
-  const isWidgetPinned = activeWidget ? pinnedWidgets.some(w => w.id === activeWidget.id) : false;
-
-  const handleGenerateVariations = async () => {
-    if (!activeWidget || messages.length === 0) return;
-    setIsLoading(true);
-    setWidgetVariations([]);
+    const { 
+        activeSessionMessages: messages, 
+        updateActiveSessionMessages: setMessages,
+        activeSessionWidgetCode: code,
+        updateActiveSessionWidgetCode: setCode,
+        toggleLeftSidebar, 
+        customPersonas, 
+        setGlobalLoading 
+    } = useAppContext();
     
-    const basePrompt = messages.find(m => m.role === 'user')?.text;
-    if (!basePrompt) {
-        setIsLoading(false);
-        return;
-    }
+    const [persona, setPersona] = useState<Persona | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [prompt, setPrompt] = useState('');
+    const [activeCodeTab, setActiveCodeTab] = useState<CodeType>('html');
+    const [srcDoc, setSrcDoc] = useState('');
+    const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
+
+    const chatEndRef = useRef<HTMLDivElement>(null);
+    const { width } = useWindowSize();
+    const isMobile = width < 1024;
+    const [mobileView, setMobileView] = useState<'chat' | 'code' | 'preview'>('code');
+
+    useEffect(() => {
+        setGlobalLoading(false);
+        const allPersonas = getPersonas(customPersonas);
+        const wfPersona = allPersonas.find(p => p.id === 'ui-architect');
+        if (wfPersona) setPersona(wfPersona);
+        return () => setGlobalLoading(false);
+    }, [customPersonas, setGlobalLoading]);
     
-    try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `Based on the prompt "${basePrompt}", generate 3 distinct design variations of the UI component. Include animations and interactivity.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        variations: {
-                            type: Type.ARRAY,
-                            items: { type: Type.STRING }
-                        }
-                    },
-                    required: ['variations']
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    useEffect(() => {
+        if (isLoading) {
+            const interval = setInterval(() => {
+                setLoadingMessage(LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
+            }, 2000);
+            return () => clearInterval(interval);
+        }
+    }, [isLoading]);
+    
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            setSrcDoc(`
+                <html>
+                    <body>${code.html}</body>
+                    <style>${code.css}</style>
+                    <script>${code.js}</script>
+                </html>
+            `);
+        }, 250);
+        return () => clearTimeout(timeout);
+    }, [code]);
+    
+    const handleCodeChange = (type: CodeType, newCode: string) => {
+        setCode(prev => ({...prev, [type]: newCode}));
+    };
+    
+    const handleSend = async (userPrompt: string) => {
+        if (!userPrompt.trim() || isLoading || !persona) return;
+        
+        const newUserMessage: Message = { id: `user-${Date.now()}`, role: 'user', text: userPrompt };
+        const newMessages = [...messages, newUserMessage];
+        setMessages(newMessages);
+        setPrompt('');
+        setIsLoading(true);
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+            const history = messagesToGeminiHistory(newMessages);
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: history,
+                config: {
+                    systemInstruction: persona.systemInstruction,
+                    responseMimeType: 'application/json'
                 }
+            });
+            
+            const aiResponse = JSON.parse(response.text);
+            
+            if(aiResponse.thought && aiResponse.code) {
+                const thoughtMessage: Message = { id: `model-${Date.now()}`, role: 'model', text: aiResponse.thought };
+                setMessages(prev => [...prev, thoughtMessage]);
+                setCode(aiResponse.code);
+            } else {
+                 throw new Error("Invalid response format from AI.");
             }
-        });
-        const parsed = JSON.parse(response.text);
-        if (parsed.variations && Array.isArray(parsed.variations)) {
-            const variations: Widget[] = parsed.variations.map((html: string, index: number) => ({
-                id: `var-${activeWidget.id}-${index}`,
-                name: `${activeWidget.name} - Var ${index + 1}`,
-                html: html,
-            }));
-            setWidgetVariations(variations);
+
+        } catch (error) {
+            console.error(error);
+            const errorMsg: Message = { id: `error-${Date.now()}`, role: 'model', text: `Sorry, an error occurred. ${error instanceof Error ? error.message : ''}` };
+            setMessages(prev => [...prev, errorMsg]);
+        } finally {
+            setIsLoading(false);
         }
-
-    } catch (error) {
-        console.error("Failed to generate variations:", error);
-    } finally {
-        setIsLoading(false);
-    }
-  };
-
-  const handleSend = async (prompt: string) => {
-    if (!prompt.trim()) return;
-    setIsLoading(true);
-    setPrompt('');
-    setWidgetVariations([]);
-    const userMessage: Message = { id: Date.now().toString(), role: 'user', text: prompt };
-    const currentMessages = [...messages, userMessage];
-    setMessages(currentMessages);
+    };
     
-    try {
-        if (!process.env.API_KEY) throw new Error("API_KEY not set");
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const persona = DEFAULT_PERSONAS.find(p => p.id === 'widget-factory')!;
-        
-        const history = currentMessages.map(msg => ({
-            role: msg.role,
-            parts: [{ text: msg.text }]
-        }));
+    if (!persona) return null; // Or a loading state
 
-        if (activeWidget && messages.length > 1) { // Refine existing
-             history.splice(0, 0, { role: 'model', parts: [{ text: activeWidget.html }]});
-        }
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: history,
-            config: { systemInstruction: persona.systemInstruction },
-        });
-        
-        const htmlContent = response.text.trim();
-        const newWidget = {
-            id: activeWidget?.id || `widget-${Date.now()}`,
-            name: prompt.substring(0, 30),
-            html: htmlContent
-        };
-        setActiveWidget(newWidget);
-        
-        const modelHtmlMessage: Message = { id: (Date.now() + 1).toString(), role: 'model', text: htmlContent };
-        setMessages(prev => [...prev, modelHtmlMessage]);
-
-    } catch (error) {
-        console.error("Widget generation failed:", error);
-        setMessages(prev => [...prev, {id: (Date.now()+1).toString(), role: 'model', text: `Sorry, I couldn't generate that widget.`}]);
-    } finally {
-        setIsLoading(false);
-    }
-  };
-  
-  const handlePinToggle = () => {
-      if (!activeWidget) return;
-      if (isWidgetPinned) {
-          unpinWidget(activeWidget.id);
-      } else {
-          pinWidget(activeWidget);
-      }
-  }
-
-  const handleClear = () => {
-    setActiveWidget(null);
-    setMessages([]);
-    setWidgetVariations([]);
-    setPrompt('');
-  }
-
-  return (
-    <div className="flex flex-col md:flex-row h-full bg-[var(--bg-primary)]">
-      {/* Live Renderer */}
-      <div className="flex-1 md:h-full flex flex-col p-4 md:p-8 bg-grid-pattern overflow-auto relative">
-        <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2">
-            <button onClick={handleClear} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-full bg-white/10 text-gray-300 hover:bg-white/20 transition-all disabled:opacity-50">
-                <RotateCcwIcon className="w-4 h-4"/>
-                <span>Clear</span>
-            </button>
-            {activeWidget && (
-                 <button onClick={handleGenerateVariations} disabled={isLoading} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-full bg-white/10 text-gray-300 hover:bg-white/20 transition-all disabled:opacity-50">
-                    <SparklesIcon className="w-4 h-4"/>
-                    <span>Generate Variations</span>
-                </button>
-            )}
-            {activeWidget && (
-                <button onClick={handlePinToggle} className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-full transition-all ${isWidgetPinned ? 'bg-amber-500/80 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-                    <PinIcon className="w-4 h-4"/>
-                    <span>{isWidgetPinned ? 'Pinned' : 'Pin'}</span>
-                </button>
-            )}
-        </div>
-        
-        <div className="flex-1 flex items-center justify-center min-h-[200px]">
-            {activeWidget ? (
-              <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: activeWidget.html }} />
-            ) : (
-              <div className="text-center text-gray-500 p-4">
-                <LayoutTemplateIcon className="w-24 h-24 mx-auto mb-4" />
-                <p>Your generated widget will appear here.</p>
-                <p className="text-xs mt-2">Try asking for "an animated login form" or "a pricing table with a toggle".</p>
-              </div>
-            )}
-        </div>
-        
-        {widgetVariations.length > 0 && (
-            <div className="flex-shrink-0 mt-4">
-                <h3 className="text-center font-semibold text-white mb-2">Variations</h3>
-                <div className="flex flex-wrap gap-4 justify-center p-4 bg-black/20 rounded-lg">
-                    {widgetVariations.map(v => (
-                        <div key={v.id} onClick={() => setActiveWidget(v)} className="w-48 h-32 bg-white rounded-md overflow-hidden cursor-pointer border-2 border-transparent hover:border-[var(--accent-primary)] transition-all">
-                             <div className="transform scale-[0.2] origin-top-left w-[960px] h-[640px]">
-                                <div dangerouslySetInnerHTML={{ __html: v.html }} />
-                            </div>
-                        </div>
-                    ))}
-                </div>
+    const codePanel = (
+         <div className="flex flex-col h-full bg-panel">
+            <div className="flex border-b border-white/10 shrink-0">
+                <button onClick={() => setActiveCodeTab('html')} className={`px-4 py-2 text-sm font-semibold ${activeCodeTab === 'html' ? 'bg-[#1e293b] text-white' : 'text-gray-400 hover:bg-white/5'}`}>HTML</button>
+                <button onClick={() => setActiveCodeTab('css')} className={`px-4 py-2 text-sm font-semibold ${activeCodeTab === 'css' ? 'bg-[#1e293b] text-white' : 'text-gray-400 hover:bg-white/5'}`}>CSS</button>
+                <button onClick={() => setActiveCodeTab('js')} className={`px-4 py-2 text-sm font-semibold ${activeCodeTab === 'js' ? 'bg-[#1e293b] text-white' : 'text-gray-400 hover:bg-white/5'}`}>JS</button>
             </div>
-        )}
-      </div>
-
-      {/* AI Chat Panel */}
-      <div className="w-full h-1/2 md:h-full md:w-96 bg-[var(--bg-secondary)] border-l border-white/10 flex flex-col">
-        <header className="p-3 border-b border-white/10 flex items-center gap-2 shrink-0">
-            <LayoutTemplateIcon className="w-6 h-6 text-[var(--accent-primary)]" />
-            <h2 className="text-lg font-semibold text-white">Widget Prototyping</h2>
-        </header>
-        <div className="flex-1 overflow-y-auto">
-            {messages.length === 0 && (
-                <div className="p-4 text-xs text-gray-400 bg-black/20">
-                    <p>Describe the UI component you want to build. The AI can create animations and add javascript for interactivity!</p>
-                </div>
-            )}
-            {messages.filter(m => !m.text.trim().startsWith('<')).map(msg => <ChatMessage key={msg.id} message={msg} />)}
+            <div className="flex-1 min-h-0">
+                {activeCodeTab === 'html' && <CodeEditor code={code.html} language="html" onCodeChange={(c) => handleCodeChange('html', c)} />}
+                {activeCodeTab === 'css' && <CodeEditor code={code.css} language="css" onCodeChange={(c) => handleCodeChange('css', c)} />}
+                {activeCodeTab === 'js' && <CodeEditor code={code.js} language="javascript" onCodeChange={(c) => handleCodeChange('js', c)} />}
+            </div>
         </div>
-        <PromptInput prompt={prompt} onPromptChange={setPrompt} onSend={handleSend} isLoading={isLoading} />
-      </div>
-    </div>
-  );
+    );
+    
+    const chatPanel = (
+        <div className="flex flex-col h-full bg-panel">
+            <div className="flex-1 overflow-y-auto">
+                {messages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
+                {isLoading && (
+                     <div className="flex items-start gap-4 p-4">
+                         <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-cyan-500/20">
+                            <BotIcon className="w-5 h-5 text-[var(--accent-primary)]" />
+                         </div>
+                         <div className="flex-grow pt-1 flex flex-col items-start gap-2">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse"></div>
+                                <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                                <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                            </div>
+                            <p className="text-sm text-[var(--text-secondary)] animate-pulse">{loadingMessage}</p>
+                        </div>
+                    </div>
+                )}
+                 <div ref={chatEndRef} />
+            </div>
+            <PromptInput prompt={prompt} onPromptChange={setPrompt} onSend={handleSend} isLoading={isLoading} />
+        </div>
+    );
+    
+    const previewPanel = <iframe srcDoc={srcDoc} title="Preview" className="w-full h-full bg-white" sandbox="allow-scripts" />;
+
+    return (
+        <div className="flex flex-col h-full bg-transparent">
+            <header className="flex items-center justify-between p-3 border-b border-[var(--panel-border-color)] shrink-0 bg-panel-no-blur">
+                 <div className="flex items-center gap-3">
+                    <button onClick={toggleLeftSidebar} className="p-2 rounded-full hover:bg-white/10 lg:hidden">
+                        <MenuIcon className="w-6 h-6" />
+                    </button>
+                    <LayoutTemplateIcon className="w-8 h-8 text-[var(--accent-primary)]" />
+                    <div>
+                        <h1 className="text-lg font-semibold text-white">{persona.name}</h1>
+                        <p className="text-xs text-[var(--text-secondary)]">{persona.description}</p>
+                    </div>
+                </div>
+            </header>
+            <div className="flex-1 min-h-0">
+                {isMobile ? (
+                    <div className="flex flex-col h-full">
+                        <div className="flex-1 min-h-0">
+                            {mobileView === 'chat' && chatPanel}
+                            {mobileView === 'code' && codePanel}
+                            {mobileView === 'preview' && previewPanel}
+                        </div>
+                        <div className="flex justify-around items-center p-1 bg-[var(--bg-secondary)] border-t border-white/10 shrink-0">
+                            <button onClick={() => setMobileView('chat')} className={`flex flex-col items-center gap-1 p-2 rounded-lg w-full ${mobileView === 'chat' ? 'text-[var(--accent-primary)]' : 'text-gray-400'}`}>
+                                <BrainCircuitIcon className="w-6 h-6"/> <span className="text-xs">Chat</span>
+                            </button>
+                             <button onClick={() => setMobileView('code')} className={`flex flex-col items-center gap-1 p-2 rounded-lg w-full ${mobileView === 'code' ? 'text-[var(--accent-primary)]' : 'text-gray-400'}`}>
+                                <CodeIcon className="w-6 h-6"/> <span className="text-xs">Code</span>
+                            </button>
+                             <button onClick={() => setMobileView('preview')} className={`flex flex-col items-center gap-1 p-2 rounded-lg w-full ${mobileView === 'preview' ? 'text-[var(--accent-primary)]' : 'text-gray-400'}`}>
+                                <LayoutTemplateIcon className="w-6 h-6"/> <span className="text-xs">Preview</span>
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex h-full">
+                        <Resizable defaultSize={{ width: '25%', height: '100%' }} minWidth="250" handleClasses={{ right: "w-1.5 h-full right-0 top-0 cursor-col-resize hover:bg-[var(--accent-primary)]/50 transition-colors z-10" }}>
+                           {chatPanel}
+                        </Resizable>
+                        <Resizable defaultSize={{ width: '45%', height: '100%' }} minWidth="300" handleClasses={{ right: "w-1.5 h-full right-0 top-0 cursor-col-resize hover:bg-[var(--accent-primary)]/50 transition-colors z-10" }}>
+                            {codePanel}
+                        </Resizable>
+                        <div className="flex-1 h-full min-w-[250px]">
+                            {previewPanel}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 };
 
 export default WidgetFactory;

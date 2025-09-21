@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { MentorXLogoIcon, BrainCircuitIcon, CodeIcon, LayoutTemplateIcon, XIcon } from './icons/Icons';
+import { MentorXLogoIcon, BrainCircuitIcon, CodeIcon, FileCodeIcon, XIcon } from './icons/Icons';
 
 const FeatureCard = ({ Icon, title, description }) => (
     <div className="flex items-start gap-4 p-4 bg-white/5 rounded-lg">
@@ -45,9 +45,9 @@ const OnboardingModal: React.FC = () => {
                             description="A live coding environment where you can build with HTML, CSS, and JS, guided by an AI developer."
                         />
                          <FeatureCard 
-                            Icon={LayoutTemplateIcon} 
-                            title="Widget Factory"
-                            description="Generate and refine UI components with help from a creative AI designer."
+                            Icon={FileCodeIcon} 
+                            title="Multi-Modal Analysis"
+                            description="Analyze and discuss various file types, including images, right within your chat."
                         />
                     </div>
                 </div>

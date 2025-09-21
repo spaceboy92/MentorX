@@ -111,13 +111,15 @@ const ImagePreviewModal: React.FC = () => {
                             <BrushIcon className="w-5 h-5"/>
                             Edit with AI
                         </label>
-                        <textarea
-                            value={editPrompt}
-                            onChange={(e) => setEditPrompt(e.target.value)}
-                            placeholder="e.g., Make the car red, add a mountain in the background..."
-                            rows={3}
-                            className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-sm focus:outline-none focus:border-[var(--accent-primary)] transition-colors resize-none"
-                        />
+                        <div className="rgb-border-glow rounded-md">
+                            <textarea
+                                value={editPrompt}
+                                onChange={(e) => setEditPrompt(e.target.value)}
+                                placeholder="e.g., Make the car red, add a mountain in the background..."
+                                rows={3}
+                                className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-sm focus:outline-none focus:border-[var(--accent-primary)] transition-colors resize-none"
+                            />
+                        </div>
                          {error && <p className="text-xs text-red-400">{error}</p>}
                         <button type="submit" disabled={isEditing} className="w-full bg-[var(--accent-primary)] text-white font-semibold py-2 rounded-lg hover:opacity-90 transition-opacity active:scale-95 disabled:opacity-50 disabled:cursor-wait">
                             {isEditing ? 'Generating...' : 'Generate Edit'}

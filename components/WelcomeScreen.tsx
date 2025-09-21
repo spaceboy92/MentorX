@@ -8,11 +8,11 @@ const WelcomeScreen: React.FC = () => {
     useEffect(() => {
         const animationTimer = setTimeout(() => {
             setIsAnimatingOut(true);
-        }, 9000); // Extended from 3s to 9s
+        }, 1500);
 
         const removalTimer = setTimeout(() => {
             setIsGone(true);
-        }, 10000); // Extended from 4s to 10s
+        }, 2500);
 
         return () => {
             clearTimeout(animationTimer);
@@ -37,14 +37,7 @@ const WelcomeScreen: React.FC = () => {
                 }
                 /* M Shape */
                 .logo-animate path:nth-of-type(1) {
-                    animation: draw-logo-path 2s cubic-bezier(0.68, -0.55, 0.27, 1.55) 0.2s forwards;
-                }
-                /* Spark Shape */
-                .logo-animate path:nth-of-type(2) {
-                    stroke-dasharray: 50;
-                    stroke-dashoffset: 50;
-                    transform-origin: center;
-                    animation: draw-and-pop 0.7s ease-out 1.5s forwards;
+                    animation: draw-logo-path 1.2s cubic-bezier(0.68, -0.55, 0.27, 1.55) 0.2s forwards;
                 }
                 
                 .welcome-text, .welcome-subtitle {
@@ -52,25 +45,15 @@ const WelcomeScreen: React.FC = () => {
                     animation: fade-in-text 0.8s ease-in forwards;
                 }
                 .welcome-text {
-                    animation-delay: 2.2s;
+                    animation-delay: 1s;
                 }
                 .welcome-subtitle {
-                    animation-delay: 2.4s;
+                    animation-delay: 1.2s;
                 }
 
                 @keyframes draw-logo-path {
                     to {
                         stroke-dashoffset: 0;
-                    }
-                }
-
-                @keyframes draw-and-pop {
-                    50% {
-                        stroke-dashoffset: 0;
-                    }
-                    100% {
-                        stroke-dashoffset: 0;
-                        transform: scale(1.1);
                     }
                 }
                 
@@ -87,7 +70,7 @@ const WelcomeScreen: React.FC = () => {
                     <MentorXLogoIcon className="w-40 h-40 logo-animate" />
                     <div className="text-center">
                         <h1 className="text-5xl font-bold text-white welcome-text tracking-widest -mt-4">MentorX</h1>
-                        <p className="text-lg text-[var(--text-secondary)] welcome-subtitle mt-2">an AI by the backbencher</p>
+                        <p className="text-lg text-[var(--text-secondary)] welcome-subtitle mt-2">Your AI-Powered Workspace</p>
                     </div>
                 </div>
             </div>

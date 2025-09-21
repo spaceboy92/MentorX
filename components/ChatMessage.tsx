@@ -1,4 +1,4 @@
-import React, { useState, memo } from 'react';
+import React, { useState, memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -12,40 +12,8 @@ interface ChatMessageProps {
   isLoading?: boolean;
 }
 
-const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
-  const [copied, setCopied] = useState(false);
-  const match = /language-(\w+)/.exec(className || '');
-  const lang = match ? match[1] : 'text';
-  const code = String(children).replace(/\n$/, '');
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return !inline ? (
-    <div className="relative my-2 rounded-lg bg-[#1e293b]/50">
-      <div className="flex items-center justify-between px-4 py-1 text-xs text-gray-400 bg-gray-800/30 rounded-t-lg">
-        <span>{lang}</span>
-        <button onClick={handleCopy} className="flex items-center gap-1 hover:text-white">
-          {copied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <CopyIcon className="w-4 h-4" />}
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
-      </div>
-      <SyntaxHighlighter style={vscDarkPlus} language={lang} PreTag="div" {...props}>
-        {code}
-      </SyntaxHighlighter>
-    </div>
-  ) : (
-    <code className="text-emerald-400 bg-gray-700/50 px-1 py-0.5 rounded-sm" {...props}>
-      {children}
-    </code>
-  );
-};
-
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading = false }) => {
-  const { uiDensity, generatedImages, openImagePreview, openBrowser } = useAppContext();
+  const { uiDensity, generatedImages, openImagePreview, openBrowser, isLiteMode } = useAppContext();
   const isModel = message.role === 'model';
 
   const densityClasses = {
@@ -67,6 +35,57 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading = false })
     e.preventDefault();
     openBrowser(uri);
   };
+  
+  const memoizedComponents = useMemo(() => {
+    const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
+      const [copied, setCopied] = useState(false);
+      const match = /language-(\w+)/.exec(className || '');
+      const lang = match ? match[1] : 'text';
+      const code = String(children).replace(/\n$/, '');
+
+      const handleCopy = () => {
+        navigator.clipboard.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      };
+      
+      if (isLiteMode && !inline) {
+        return (
+            <div className="relative my-2 rounded-lg bg-[#1e293b]/50">
+              <div className="flex items-center justify-between px-4 py-1 text-xs text-gray-400 bg-gray-800/30 rounded-t-lg">
+                <span>{lang}</span>
+                <button onClick={handleCopy} className="flex items-center gap-1 hover:text-white">
+                  {copied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <CopyIcon className="w-4 h-4" />}
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <pre className="p-4 overflow-x-auto text-sm"><code className={className}>{children}</code></pre>
+            </div>
+        );
+      }
+
+      return !inline ? (
+        <div className="relative my-2 rounded-lg bg-[#1e293b]/50">
+          <div className="flex items-center justify-between px-4 py-1 text-xs text-gray-400 bg-gray-800/30 rounded-t-lg">
+            <span>{lang}</span>
+            <button onClick={handleCopy} className="flex items-center gap-1 hover:text-white">
+              {copied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <CopyIcon className="w-4 h-4" />}
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <SyntaxHighlighter style={vscDarkPlus} language={lang} PreTag="div" {...props}>
+            {code}
+          </SyntaxHighlighter>
+        </div>
+      ) : (
+        <code className="text-emerald-400 bg-gray-700/50 px-1 py-0.5 rounded-sm" {...props}>
+          {children}
+        </code>
+      );
+    };
+    return { code: CodeBlock };
+  }, [isLiteMode]);
+
 
   if (message.type === 'summary') {
     return (
@@ -89,12 +108,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading = false })
       <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isModel ? 'bg-cyan-500/20' : 'bg-indigo-500/20'}`}>
         {isModel ? <BotIcon className="w-5 h-5 text-[var(--accent-primary)]" /> : <UserIcon className="w-5 h-5 text-[var(--text-secondary)]" />}
       </div>
-      <div className="flex-grow pt-1 overflow-x-auto">
+      <div className="flex-grow pt-1 min-w-0">
         <div className="prose prose-invert prose-sm max-w-none prose-p:text-[var(--text-primary)] prose-headings:text-white prose-strong:text-white">
           {message.type !== 'image' && (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={{ code: CodeBlock }}
+              components={memoizedComponents}
             >
               {message.text + (isModel && isLoading ? '​<span class="blinking-cursor">|</span>' : '')}
             </ReactMarkdown>
@@ -141,8 +160,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading = false })
                   href={citation.uri}
                   onClick={(e) => handleCitationClick(e, citation.uri)}
                   className="text-xs bg-white/5 hover:bg-white/10 text-[var(--accent-primary)] px-2 py-1 rounded-md truncate max-w-xs cursor-pointer"
+                  title={citation.title || citation.uri}
                 >
-                  {citation.title || citation.uri}
+                  {citation.title || new URL(citation.uri).hostname}
                 </a>
               ))}
             </div>

@@ -13,7 +13,8 @@ export interface Persona {
   description: string;
   systemInstruction: string;
   icon: React.ComponentType<{ className?: string }>;
-  workspace: 'chat' | 'code' | 'widget' | 'content' | 'video';
+  workspace: 'chat' | 'code' | 'widget' | 'content' | 'video' | 'hacking';
+  route?: string; // e.g., '/chat' for unified chat, '/code-sandbox' for specific tool
   custom?: boolean;
 }
 
@@ -56,6 +57,13 @@ export interface Session {
   name: string;
   personaId: string;
   messages: Message[];
+  fileSystem?: FileSystemItem[];
+  packages?: string[];
+  widgetCode?: {
+    html: string;
+    css: string;
+    js: string;
+  };
 }
 
 export interface User {
@@ -63,12 +71,6 @@ export interface User {
   name: string;
   email: string;
   picture: string;
-}
-
-export interface Widget {
-  id: string;
-  name: string;
-  html: string;
 }
 
 export interface ImageRecord {
@@ -99,7 +101,7 @@ export interface ClipEffect {
 }
 
 export interface ClipTransition {
-  type: 'fade-in';
+  type: 'fade-in' | 'fade-out' | 'wipe-left' | 'wipe-right';
   duration: number; // in seconds
 }
 
@@ -117,6 +119,7 @@ export interface TimelineClip {
   duration: number;
   effects: ClipEffect[];
   transition?: ClipTransition; // Transition leading INTO this clip
+  outroTransition?: ClipTransition; // Transition leading OUT of this clip
 
   // For text clips
   text?: string;
@@ -134,6 +137,12 @@ export interface TimelineTrack {
   clips: TimelineClip[];
 }
 
+export interface UserMemory {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface AppContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
@@ -145,31 +154,28 @@ export interface AppContextType {
   setFocusMode: (focus: boolean) => void;
   notes: string;
   setNotes: (notes: string) => void;
-  sessions: Omit<Session, 'messages'>[];
+  sessions: Omit<Session, 'messages' | 'fileSystem' | 'packages' | 'widgetCode'>[];
   activeSessionId: string | null;
   selectSession: (sessionId: string | null) => void;
   createNewSession: (personaId: string, initialMessages?: Message[]) => string;
-  updateMessagesForActiveSession: (messages: Message[]) => void;
-  deleteSession: (sessionId: string) => { nextSessionId: string | null };
+  deleteSession: (sessionId: string) => { nextSessionId: string | null; wasActiveSessionDeleted: boolean; };
   renameSession: (sessionId: string, newName: string) => void;
+  updateSessionPersona: (sessionId: string, newPersonaId: string) => void;
   isSettingsOpen: boolean;
   toggleSettings: () => void;
   currentUser: User | null;
-  signIn: (token: string) => void;
+  signIn: (user: User | string) => void;
   signOut: () => void;
-  pinnedWidgets: Widget[];
-  pinWidget: (widget: Widget) => void;
-  unpinWidget: (widgetId: string) => void;
   isCommandPaletteOpen: boolean;
   toggleCommandPalette: () => void;
   hasBeenOnboarded: boolean;
   completeOnboarding: () => void;
   customPersonas: Persona[];
-  addCustomPersona: (persona: Omit<Persona, 'id' | 'custom' | 'workspace'>) => void;
+  addCustomPersona: (persona: Omit<Persona, 'id' | 'custom' | 'workspace' | 'route'>) => void;
   updateCustomPersona: (persona: Persona) => void;
   deleteCustomPersona: (personaId: string) => void;
   isPersonaModalOpen: boolean;
-  openPersonaModal: (persona?: Persona) => void;
+  openPersonaModal: (persona?: Persona | null) => void;
   closePersonaModal: () => void;
   editingPersona: Persona | null;
   generatedImages: ImageRecord[];
@@ -183,6 +189,11 @@ export interface AppContextType {
   previewingImage: ImageRecord | null;
   openImagePreview: (image: ImageRecord) => void;
   closeImagePreview: () => void;
+
+  // Image Library Modal
+  isImageLibraryOpen: boolean;
+  openImageLibrary: () => void;
+  closeImageLibrary: () => void;
 
   // In-App Browser Modal
   isBrowserOpen: boolean;
@@ -201,12 +212,49 @@ export interface AppContextType {
   setLeftSidebarWidth: (width: number) => void;
   rightSidebarWidth: number;
   setRightSidebarWidth: (width: number) => void;
+  isGlassmorphism: boolean;
+  setGlassmorphism: (enabled: boolean) => void;
+
+  // Performance Mode
+  isLiteMode: boolean;
+  setLiteMode: (lite: boolean) => void;
+
+  // Global Loading State
+  isGlobalLoading: boolean;
+  setGlobalLoading: (isLoading: boolean) => void;
+  
+  // Personalization
+  isMemoryEnabled: boolean;
+  setMemoryEnabled: (enabled: boolean) => void;
+  userMemories: UserMemory[];
+  addUserMemory: (memory: Omit<UserMemory, 'id'>) => void;
+  updateUserMemory: (memory: UserMemory) => void;
+  deleteUserMemory: (memoryId: string) => void;
+  
+  // Guest Mode
+  isGuest: boolean;
+  setGuestMode: (isGuest: boolean) => void;
+  
+  // Active Session Data Management
+  activeSessionMessages: Message[];
+  updateActiveSessionMessages: (updater: React.SetStateAction<Message[]>) => void;
+  activeSessionFileSystem: FileSystemItem[];
+  updateActiveSessionFileSystem: (updater: React.SetStateAction<FileSystemItem[]>) => void;
+  activeSessionPackages: string[];
+  updateActiveSessionPackages: (updater: React.SetStateAction<string[]>) => void;
+  activeSessionWidgetCode: { html: string; css: string; js: string; };
+  updateActiveSessionWidgetCode: (updater: React.SetStateAction<{ html: string; css: string; js: string; }>) => void;
 }
 
 // FIX: Added type definitions for the Google Identity Services client library.
 // This resolves TypeScript errors by informing the compiler about the `window.google` object
 // that is available globally when the Google Sign-In script is loaded.
+// EXTEND: Added `deviceMemory` to the global Navigator type to allow for performance checks
+// on supported browsers (like Chrome) without causing TypeScript errors.
 declare global {
+  interface Navigator {
+    deviceMemory?: number;
+  }
   interface Window {
     google?: {
       accounts: {

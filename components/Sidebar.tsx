@@ -1,8 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+
+
+
+import React, { useState, useEffect, useRef } from 'react';
+// FIX: Using namespace import for react-router-dom to resolve module export errors.
+import * as ReactRouterDom from 'react-router-dom';
+const { useNavigate } = ReactRouterDom;
 import { useAppContext } from '../contexts/AppContext';
 import { getPersonas } from '../constants';
-import { XIcon, MentorXLogoIcon, SettingsIcon, MessageSquarePlusIcon, Trash2Icon, SearchIcon, CommandIcon, PencilIcon } from './icons/Icons';
+import { XIcon, MentorXLogoIcon, SettingsIcon, MessageSquarePlusIcon, Trash2Icon, SearchIcon, CommandIcon, PencilIcon, ImageIcon } from './icons/Icons';
 import type { Persona, Session } from '../types';
 
 const Sidebar: React.FC = () => {
@@ -18,13 +24,14 @@ const Sidebar: React.FC = () => {
     currentUser,
     toggleCommandPalette,
     customPersonas,
-    deleteCustomPersona,
     uiDensity,
+    openImageLibrary,
   } = useAppContext();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const prevActiveSessionIdRef = useRef(activeSessionId);
 
   const personas = getPersonas(customPersonas);
   
@@ -37,58 +44,27 @@ const Sidebar: React.FC = () => {
     selectSession(session.id);
   }
 
-  // Effect to handle navigation when active session changes
   useEffect(() => {
-    if (activeSessionId === null) {
-      // Don't force navigation if on a non-session page like the video studio
-      if (window.location.hash.endsWith('/') || window.location.hash === '#') {
-         // Already on dashboard
-      } else if (!window.location.hash.includes('/')) {
-        // Also dashboard
+    if (prevActiveSessionIdRef.current !== activeSessionId) {
+      if (window.innerWidth < 1024 && isLeftSidebarOpen) {
+        toggleLeftSidebar();
       }
-      else {
-          const isNonChatPage = ['/code-sandbox', '/widget-factory', '/content-lab', '/video-studio'].some(path => window.location.hash.endsWith(path));
-          if (!isNonChatPage) {
-            navigate('/');
-          }
-      }
-      return;
     }
+    prevActiveSessionIdRef.current = activeSessionId;
+  }, [activeSessionId, isLeftSidebarOpen, toggleLeftSidebar]);
 
-    const session = sessions.find(s => s.id === activeSessionId);
-    if (!session) return;
-    
-    const persona = personas.find(p => p.id === session.personaId);
-    if (!persona) return;
-
-    let path = '/';
-    switch (persona.workspace) {
-      case 'chat': path = `/chat/${persona.id}`; break;
-      case 'code': path = '/code-sandbox'; break;
-      case 'widget': path = '/widget-factory'; break;
-      case 'content': path = '/content-lab'; break;
-      case 'video': path = '/video-studio'; break;
-    }
-    navigate(path);
-    
-    if (window.innerWidth < 1024 && isLeftSidebarOpen) { // Close sidebar on mobile/tablet after selection
-      toggleLeftSidebar();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId, navigate]);
   
   const handleNewChat = () => {
-    selectSession(null);
-    navigate('/'); // FIX: Explicitly navigate to dashboard to exit any workspace
-    if (window.innerWidth < 1024) { // Close sidebar on mobile/tablet
-        toggleLeftSidebar();
-    }
+    selectSession(null); // This will navigate to the dashboard via RouterSync
   }
 
   const handleDeleteChat = (e: React.MouseEvent, sessionId: string) => {
       e.stopPropagation();
       if (window.confirm('Are you sure you want to delete this chat?')) {
-          deleteSession(sessionId);
+          const { nextSessionId, wasActiveSessionDeleted } = deleteSession(sessionId);
+          if (wasActiveSessionDeleted) {
+              selectSession(nextSessionId);
+          }
       }
   }
   
@@ -112,9 +88,11 @@ const Sidebar: React.FC = () => {
     }
   }, [editingSessionId]);
   
-  const filteredSessions = sessions.filter(session => 
-    session.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredSessions = sessions.filter(session => {
+    const persona = personas.find(p => p.id === session.personaId);
+    return (['chat', 'code', 'widget'].includes(persona?.workspace || '')) && session.name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
 
   return (
     <aside 
@@ -127,7 +105,7 @@ const Sidebar: React.FC = () => {
     >
       <div className="flex flex-col h-full">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => selectSession(null)}>
             <MentorXLogoIcon className="w-8 h-8" />
             <h1 className="text-xl font-bold text-white">MentorX</h1>
           </div>
@@ -144,8 +122,15 @@ const Sidebar: React.FC = () => {
               <MessageSquarePlusIcon className="w-5 h-5" />
               <span>New Chat</span>
             </button>
-            <div className='relative'>
-                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+             <button
+              onClick={openImageLibrary}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 bg-white/5 text-[var(--text-primary)] hover:bg-[var(--accent-primary)] hover:text-white transform active:scale-95"
+            >
+                <ImageIcon className="w-5 h-5" />
+                <span>Image Library</span>
+            </button>
+            <div className='relative rgb-border-glow rounded-md'>
+                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
                  <input 
                     type="text"
                     placeholder="Search history..."
@@ -158,24 +143,30 @@ const Sidebar: React.FC = () => {
 
         <nav className="flex-1 px-2 space-y-1 overflow-y-auto">
           <h2 className="px-2 pt-2 text-xs font-semibold tracking-wider text-gray-400 uppercase">History</h2>
-          {filteredSessions.map((session) => (
+          {filteredSessions.map((session) => {
+             const sessionPersona = personas.find(p => p.id === session.personaId);
+             return (
              <div key={session.id} className="relative group">
                 {editingSessionId === session.id ? (
-                    <input
-                        id={`rename-input-${session.id}`}
-                        type="text"
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        onBlur={() => handleRenameSubmit(session.id)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit(session.id)}
-                        className={`w-full bg-white/20 border border-white/30 rounded-md px-3 text-sm text-white focus:outline-none focus:border-[var(--accent-primary)] ${densityClasses[uiDensity]}`}
-                    />
+                    <div className={`relative w-full flex items-center`}>
+                        {sessionPersona && <sessionPersona.icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />}
+                        <input
+                            id={`rename-input-${session.id}`}
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onBlur={() => handleRenameSubmit(session.id)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit(session.id)}
+                            className={`w-full bg-white/20 border border-white/30 rounded-md pl-9 pr-3 text-sm text-white focus:outline-none focus:border-[var(--accent-primary)] ${densityClasses[uiDensity]}`}
+                        />
+                    </div>
                 ) : (
                     <button
                       onClick={() => handleSessionClick(session)}
-                      className={`w-full text-left pr-12 px-3 text-sm font-medium rounded-md truncate transition-all duration-200 transform active:scale-95 ${activeSessionId === session.id ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/5 hover:text-white'} ${densityClasses[uiDensity]}`}
+                      className={`w-full text-left pr-12 px-3 text-sm font-medium rounded-md transition-all duration-200 transform active:scale-95 flex items-center ${activeSessionId === session.id ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/5 hover:text-white'} ${densityClasses[uiDensity]}`}
                     >
-                      {session.name}
+                      {sessionPersona && <sessionPersona.icon className="w-4 h-4 mr-2 flex-shrink-0" />}
+                      <span className="truncate">{session.name}</span>
                     </button>
                 )}
                 <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
@@ -195,7 +186,7 @@ const Sidebar: React.FC = () => {
                     </button>
                 </div>
              </div>
-          ))}
+             )})}
         </nav>
         
         <div className="p-2 border-t border-white/10 space-y-1">
@@ -204,7 +195,7 @@ const Sidebar: React.FC = () => {
                     <CommandIcon className="w-5 h-5" />
                     <span className="truncate">Command Palette</span>
                 </div>
-                <span className="text-xs border border-gray-600 rounded-md px-1.5 py-0.5">Ctrl+K</span>
+                <span className="text-xs border border-gray-600 rounded-md px-1.5 py-0.5">⌘K</span>
             </button>
             {currentUser ? (
                  <button onClick={toggleSettings} className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm font-medium rounded-md transition-colors text-[var(--text-secondary)] hover:bg-white/10 hover:text-white">
